@@ -19,19 +19,20 @@
 
 
 int16_t max31855toCelcius(uint8_t *pu8Data) {
-    uint16_t *pu16Data = (uint16_t *) pu8Data;
-    uint16_t u16RawTemp = pu16Data[1]; //The Thermocouple temp is stored in the upper 14 bits, bit 16 & 17 are not needed.
+    uint16_t u16RawTemp;
     int16_t i16Celcius;
+
+	u16RawTemp = pu8Data[0]; //The Thermocouple temperature is stored in the upper 14 bits, bit 16 & 17 are not needed.
+    u16RawTemp <<= 8;
+    u16RawTemp |= pu8Data[1];
     
-    if (u16RawTemp && 0x8000) { //temp is negative
-        u16RawTemp = (u16RawTemp >> 2) & 0xFFFF; // drop lower two bits and keep 2's complemnt
+    if (u16RawTemp & 0x8000) { //temperature is negative
+        u16RawTemp = 0xF000 | (u16RawTemp >> 4); // drop lower 4 bits and keep 2's complement
 
     } else { // temp is positive
-        u16RawTemp >>= 2; //drop lower two bits.
+        u16RawTemp >>= 4; //drop lower 4 bits.
     }
-
-    u16RawTemp >>= 2; // Divide by 4 (multiply by .25) //we don't care about the decimal place.
-    i16Celcius = (int16_t) u16RawTemp;
+    i16Celcius = u16RawTemp & 0xFFFF;
 
     return i16Celcius;
 }
@@ -43,14 +44,13 @@ int16_t max31855toCelcius_InternalRef(uint8_t *pu8Data) {
     int16_t i16Celcius;
     
     if (u16RawTemp && 0x8000) { //temp is negative
-        u16RawTemp = (u16RawTemp >> 4) & 0xFFFF; // drop lower four bits and keep 2's complemnt
+        u16RawTemp = (u16RawTemp >> 4) | 0xF800; // drop lower four bits and keep 2's complemnt
 
     } else { // temp is positive
-        u16RawTemp >>= 2; //drop lower two bits.
+        u16RawTemp >>= 4; //drop lower two bits.
     }
 
-    u16RawTemp >>= 4; // Divide by 4 (multiply by .25) //we don't care about the decimal place.
-    i16Celcius = (int16_t) u16RawTemp;
+    i16Celcius = u16RawTemp;
 
     return i16Celcius;
 }
@@ -62,11 +62,11 @@ int16_t max31855toCelcius_InternalRef(uint8_t *pu8Data) {
  * @retval int
  */
 
-int max31855_ThermoCoupleDisconnected(uint8_t * pu8Data) {
+int max31855_Disconnected(uint8_t * pu8Data) {
     // If the thermocouple is disconnected, then the first bit is set. 
     // So if you & the first byte with 0x01, then if its disconnected,
     // it will return true 
-    return (pu8Data[0] & 0x01);
+    return (pu8Data[3] & 0x01);
 }
 
 /**
@@ -75,7 +75,7 @@ int max31855_ThermoCoupleDisconnected(uint8_t * pu8Data) {
  * @retval int
  */
 int max31855_ShortGND(uint8_t * pu8Data) {
-    return (pu8Data[0] & 0x02);
+    return (pu8Data[3] & 0x02);
 }
 
 /**
@@ -84,7 +84,7 @@ int max31855_ShortGND(uint8_t * pu8Data) {
  * @retval int
  */
 int max31855_ShortVCC(uint8_t * pu8Data) {
-    return (pu8Data[0] & 0x04);
+    return (pu8Data[3] & 0x04);
 }
 
 /**

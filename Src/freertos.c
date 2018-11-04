@@ -1,8 +1,7 @@
 /**
   ******************************************************************************
-  * @file           : main.h
-  * @brief          : Header for main.c file.
-  *                   This file contains the common defines of the application.
+  * File Name          : freertos.c
+  * Description        : Code for freertos applications
   ******************************************************************************
   * This notice applies to any and all portions of this file
   * that are not between comment pairs USER CODE BEGIN and
@@ -47,94 +46,30 @@
   ******************************************************************************
   */
 
-/* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __MAIN_H__
-#define __MAIN_H__
-
 /* Includes ------------------------------------------------------------------*/
+#include "FreeRTOS.h"
+#include "task.h"
 
-/* USER CODE BEGIN Includes */
-#include "stdint.h"
-#include "string.h"
-#include "max31855.h"
-#include "he_pid.h"
+/* USER CODE BEGIN Includes */     
 
 /* USER CODE END Includes */
 
-/* Private define ------------------------------------------------------------*/
+/* Variables -----------------------------------------------------------------*/
 
-#define USER_Btn_Pin GPIO_PIN_13
-#define USER_Btn_GPIO_Port GPIOC
-#define MCO_Pin GPIO_PIN_0
-#define MCO_GPIO_Port GPIOH
-#define RMII_MDC_Pin GPIO_PIN_1
-#define RMII_MDC_GPIO_Port GPIOC
-#define RMII_MDIO_Pin GPIO_PIN_2
-#define RMII_MDIO_GPIO_Port GPIOA
-#define RMII_RXD0_Pin GPIO_PIN_4
-#define RMII_RXD0_GPIO_Port GPIOC
-#define RMII_RXD1_Pin GPIO_PIN_5
-#define RMII_RXD1_GPIO_Port GPIOC
-#define SPI1_CS0_Pin GPIO_PIN_13
-#define SPI1_CS0_GPIO_Port GPIOF
-#define SPI1_CS1_Pin GPIO_PIN_14
-#define SPI1_CS1_GPIO_Port GPIOF
-#define RMII_TXD1_Pin GPIO_PIN_13
-#define RMII_TXD1_GPIO_Port GPIOB
-#define LD3_Pin GPIO_PIN_14
-#define LD3_GPIO_Port GPIOB
-#define STLK_RX_Pin GPIO_PIN_8
-#define STLK_RX_GPIO_Port GPIOD
-#define STLK_TX_Pin GPIO_PIN_9
-#define STLK_TX_GPIO_Port GPIOD
-#define USB_PowerSwitchOn_Pin GPIO_PIN_6
-#define USB_PowerSwitchOn_GPIO_Port GPIOG
-#define USB_OverCurrent_Pin GPIO_PIN_7
-#define USB_OverCurrent_GPIO_Port GPIOG
-#define USB_SOF_Pin GPIO_PIN_8
-#define USB_SOF_GPIO_Port GPIOA
-#define USB_VBUS_Pin GPIO_PIN_9
-#define USB_VBUS_GPIO_Port GPIOA
-#define USB_ID_Pin GPIO_PIN_10
-#define USB_ID_GPIO_Port GPIOA
-#define USB_DM_Pin GPIO_PIN_11
-#define USB_DM_GPIO_Port GPIOA
-#define USB_DP_Pin GPIO_PIN_12
-#define USB_DP_GPIO_Port GPIOA
-#define TMS_Pin GPIO_PIN_13
-#define TMS_GPIO_Port GPIOA
-#define TCK_Pin GPIO_PIN_14
-#define TCK_GPIO_Port GPIOA
-#define RMII_TX_EN_Pin GPIO_PIN_11
-#define RMII_TX_EN_GPIO_Port GPIOG
-#define RMII_TXD0_Pin GPIO_PIN_13
-#define RMII_TXD0_GPIO_Port GPIOG
-#define SWO_Pin GPIO_PIN_3
-#define SWO_GPIO_Port GPIOB
-#define LD2_Pin GPIO_PIN_7
-#define LD2_GPIO_Port GPIOB
+/* USER CODE BEGIN Variables */
 
-/* ########################## Assert Selection ############################## */
-/**
-  * @brief Uncomment the line below to expanse the "assert_param" macro in the 
-  *        HAL drivers code
-  */
-/* #define USE_FULL_ASSERT    1U */
+/* USER CODE END Variables */
 
-/* USER CODE BEGIN Private defines */
+/* Function prototypes -------------------------------------------------------*/
 
-/* USER CODE END Private defines */
+/* USER CODE BEGIN FunctionPrototypes */
 
-#ifdef __cplusplus
- extern "C" {
-#endif
-void _Error_Handler(char *, int);
+/* USER CODE END FunctionPrototypes */
 
-#define Error_Handler() _Error_Handler(__FILE__, __LINE__)
-#ifdef __cplusplus
-}
-#endif
+/* Hook prototypes */
 
-#endif /* __MAIN_H__ */
+/* USER CODE BEGIN Application */
+     
+/* USER CODE END Application */
 
 /************************ (C) COPYRIGHT STMicroelectronics *****END OF FILE****/
