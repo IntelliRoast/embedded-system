@@ -143,7 +143,7 @@ int main(void)
 
 	/* Create the thread(s) */
 	/* definition and creation of defaultTask */
-	osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 256);
+	osThreadDef(defaultTask, StartDefaultTask, osPriorityAboveNormal, 0, 256);
 	defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
 	/* USER CODE BEGIN RTOS_THREADS */
@@ -234,12 +234,12 @@ static void MX_SPI1_Init(void)
 	/* SPI1 parameter configuration*/
 	hspi1.Instance = SPI1;
 	hspi1.Init.Mode = SPI_MODE_MASTER;
-	hspi1.Init.Direction = SPI_DIRECTION_2LINES_RXONLY;
+	hspi1.Init.Direction = SPI_DIRECTION_2LINES;
 	hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-	hspi1.Init.CLKPolarity = SPI_POLARITY_HIGH;
+	hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
 	hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-	hspi1.Init.NSS = SPI_NSS_HARD_OUTPUT;
-	hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_64;
+	hspi1.Init.NSS = SPI_NSS_SOFT;
+	hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
 	hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
 	hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
 	hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -529,7 +529,7 @@ void StartDefaultTask(void const * argument)
 		//Gather Bean Temp
 		HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-		osDelay(10);
+		HAL_Delay(1);
 		HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_SET);
 		if(max31855_Error(spi_data)) {
 			if (max31855_Disconnected(spi_data)) {
@@ -547,7 +547,7 @@ void StartDefaultTask(void const * argument)
 
 		//Gather Heating Element Temp
 		HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_RESET);
-		osDelay(1);
+		HAL_Delay(1);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 		HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_SET);
 		if(max31855_Error(spi_data)) {
