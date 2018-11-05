@@ -567,7 +567,7 @@ void StartDefaultTask(void const * argument)
 		sprintf(temp_msg, "Bean Temp: %dC\r\n Element Temp: %dC\r\n\r\n",bean_temp, element_temp);
 		HAL_UART_Transmit(&huart3, (uint8_t*)temp_msg, strlen(temp_msg), 0xFFF);
 
-		heDutyCycle = HE_PID(bean_temp, element_temp, 0);
+		heDutyCycle = HE_PID(element_temp, 500, 0);
 		sprintf(temp_msg, "Heating Element Duty Cycle: %d\r\n\r\n", heDutyCycle);
 		HAL_UART_Transmit(&huart3, (uint8_t*)temp_msg, strlen(temp_msg), 0xFFF);
 

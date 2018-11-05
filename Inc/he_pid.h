@@ -11,9 +11,9 @@
 #include "stdint.h"
 
 /* Defines used in PID function */
-#define Kp 	0.5
-#define Ki 	0.075
-#define Kd  0.2
+#define Kp 	0.7
+#define Ki 	0.03
+#define Kd  2
 
 
 /**
