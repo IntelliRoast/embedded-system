@@ -508,74 +508,77 @@ void StartDefaultTask(void const * argument)
 {
 
 	/* USER CODE BEGIN 5 */
-	HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_SET);
-
-	uint8_t spi_data[4] = {0};
-	int16_t bean_temp;
-	int16_t element_temp;
-	uint8_t heDutyCycle;
-	char temp_msg[80] = {0};
-	char tcError_msg[80];
-
-	char init_msg[] = "IntelliRoast initializing...\r\n\r\n\r\n\r\n";
-	HAL_UART_Transmit(&huart3, (uint8_t*)init_msg, strlen(init_msg), 0xFFF);
-
-	/* Infinite loop */
-	for(;;) {
-		HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
-
-		//Gather Bean Temp
-		HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_RESET);
-		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-		HAL_Delay(1);
+	HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
 		HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_SET);
-		if(max31855_Error(spi_data)) {
-			if (max31855_Disconnected(spi_data)) {
-				sprintf(tcError_msg, "ERROR: Bean Thermocouple Disconnected\r\n");
-			} else if (max31855_ShortVCC(spi_data)) {
-				sprintf(tcError_msg, "ERROR: Bean Thermocouple Shorted to VCC\r\n");
-			} else if (max31855_ShortGND(spi_data)) {
-				sprintf(tcError_msg, "ERROR: Bean Thermocouple Shorted to GND\r\n");
-			} else {
-				sprintf(tcError_msg, "ERROR: Bean Thermocouple has unknown error\r\n");
-			}
-			HAL_UART_Transmit(&huart3, (uint8_t*)tcError_msg, strlen(tcError_msg), 0xFFF);
-		}
-		bean_temp = max31855toCelcius(spi_data);
-
-		//Gather Heating Element Temp
-		HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_RESET);
-		HAL_Delay(1);
-		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 		HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_SET);
-		if(max31855_Error(spi_data)) {
-			if (max31855_Disconnected(spi_data)) {
-				sprintf(tcError_msg, "ERROR: HE Thermocouple Disconnected\r\n");
-			} else if (max31855_ShortVCC(spi_data)) {
-				sprintf(tcError_msg, "ERROR: HE Thermocouple Shorted to VCC\r\n");
-			} else if (max31855_ShortGND(spi_data)) {
-				sprintf(tcError_msg, "ERROR: HE Thermocouple Shorted to GND\r\n");
-			} else {
-				sprintf(tcError_msg, "ERROR: HE Thermocouple has unknown error\r\n");
+
+		uint8_t spi_data[4] = {0};
+		int16_t bean_temp;
+		int16_t element_temp;
+		uint8_t heDutyCycle;
+		uint8_t heDutyCyclePercentage;
+		uint8_t u8_len;
+		char temp_msg[80] = {0};
+		char tcError_msg[80];
+
+		sprintf(temp_msg, "BT ET HEDC\n\n");
+		HAL_UART_Transmit(&huart3, (uint8_t*)temp_msg, strlen(temp_msg), 0xFFF);
+
+		/* Infinite loop */
+		for(;;) {
+			HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+
+			//Gather Bean Temp
+			HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_RESET);
+			HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
+			HAL_Delay(1);
+			HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_SET);
+			if(max31855_Error(spi_data)) {
+				if (max31855_Disconnected(spi_data)) {
+					sprintf(tcError_msg, "ERROR: Bean Thermocouple Disconnected\r\n");
+				} else if (max31855_ShortVCC(spi_data)) {
+					sprintf(tcError_msg, "ERROR: Bean Thermocouple Shorted to VCC\r\n");
+				} else if (max31855_ShortGND(spi_data)) {
+					sprintf(tcError_msg, "ERROR: Bean Thermocouple Shorted to GND\r\n");
+				} else {
+					sprintf(tcError_msg, "ERROR: Bean Thermocouple has unknown error\r\n");
+				}
+				HAL_UART_Transmit(&huart3, (uint8_t*)tcError_msg, strlen(tcError_msg), 0xFFF);
 			}
-			HAL_UART_Transmit(&huart3, (uint8_t*)tcError_msg, strlen(tcError_msg), 0xFFF);
+			bean_temp = max31855toCelcius(spi_data);
+
+
+			//Gather Heating Element Temp
+			HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_RESET);
+			HAL_Delay(1);
+			HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
+			HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_SET);
+			if(max31855_Error(spi_data)) {
+				if (max31855_Disconnected(spi_data)) {
+					sprintf(tcError_msg, "ERROR: HE Thermocouple Disconnected\r\n");
+				} else if (max31855_ShortVCC(spi_data)) {
+					sprintf(tcError_msg, "ERROR: HE Thermocouple Shorted to VCC\r\n");
+				} else if (max31855_ShortGND(spi_data)) {
+					sprintf(tcError_msg, "ERROR: HE Thermocouple Shorted to GND\r\n");
+				} else {
+					sprintf(tcError_msg, "ERROR: HE Thermocouple has unknown error\r\n");
+				}
+				HAL_UART_Transmit(&huart3, (uint8_t*)tcError_msg, strlen(tcError_msg), 0xFFF);
+			}
+			element_temp = max31855toCelcius(spi_data);
+
+
+			heDutyCycle = HE_PID(bean_temp, 250, 0);
+			heDutyCyclePercentage = heDutyCycle; ///255;
+			setPWM(htim2, TIM_CHANNEL_1, 999, heDutyCycle);
+
+			sprintf(temp_msg, "%d %d %d\r\n\r\n", bean_temp, element_temp, heDutyCyclePercentage);
+			u8_len = strlen(temp_msg);
+			HAL_UART_Transmit(&huart3, (uint8_t*)temp_msg, u8_len, 0xFFF);
+			//HAL_UART_Transmit(&btuart, (uint8_t*)temp_msg, u8_len, 0xFFF);
+
+			osDelay(500);
 		}
-		element_temp = max31855toCelcius(spi_data);
-
-		sprintf(temp_msg, "Bean Temp: %dC\r\n Element Temp: %dC\r\n\r\n",bean_temp, element_temp);
-		HAL_UART_Transmit(&huart3, (uint8_t*)temp_msg, strlen(temp_msg), 0xFFF);
-
-		heDutyCycle = HE_PID(element_temp, 500, 0);
-		sprintf(temp_msg, "Heating Element Duty Cycle: %d\r\n\r\n", heDutyCycle);
-		HAL_UART_Transmit(&huart3, (uint8_t*)temp_msg, strlen(temp_msg), 0xFFF);
-
-		setPWM(htim2, TIM_CHANNEL_1, 999, heDutyCycle);
-		HAL_UART_Transmit(&huart3, (uint8_t*)"Heating Element Duty Cycle set...\r\n\r\n", 37, 0xFFF);
-
-		osDelay(1000);
-	}
 	/* USER CODE END 5 */
 }
 
