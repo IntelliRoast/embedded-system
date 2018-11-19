@@ -8,10 +8,13 @@
 #ifndef DATA_TYPES_H_
 #define DATA_TYPES_H_
 
+
+#include "stdint.h"
+
 /**
- * if start, machine will begin roasting using currently loaded profile
+ * if start, machine will begin roasting using currently loaded profile.
  * if load, then the temp and time will be stored in the profile according to the index.
- * if stop, pause roast
+ * if stop, pause roast.
  * if eject, end roast and blast out beans.
  */
 enum cmd_t {
@@ -23,14 +26,21 @@ enum cmd_t {
 /**
  * @brief Temp Time Pair.
  * An array of such will be sent over Bluetooth from phone to MCU to define profile.
- * total size shoudld be 6 bytes
+ * total size should be 6 bytes
  */
 typedef struct profile_t {
+	int time;
+	int temp;
+} profile_t;
+
+
+
+typedef struct commands_t {
 	enum cmd_t cmd;
 	uint8_t index;
-	uint16_t temp; /**< profile_t#temp is a temperature in Celcius that the beans should hit at the time indicated in profile_t#time. */
-	uint16_t time; /**< profile_t#time is the time in seconds at which the beans should hit the temp indicated in profile_t#temp */
-} profile_t;
+	int temp; /**< profile_t#temp is a temperature in Celcius that the beans should hit at the time indicated in profile_t#time. */
+	int time; /**< profile_t#time is the time in seconds at which the beans should hit the temp indicated in profile_t#temp */
+} commands_t;
 
 /**
  * @brief An array of such will be sent over from the MCU to the phone during the the roast

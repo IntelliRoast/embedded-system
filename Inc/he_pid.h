@@ -11,9 +11,9 @@
 #include "stdint.h"
 
 /* Defines used in PID function */
-#define Kp 	0.7
-#define Ki 	0.03
-#define Kd  2
+#define Kp 	20
+#define Ki 	 10
+#define Kd  15
 
 
 /**
@@ -25,7 +25,7 @@
  * @retval		0			Cut the Heating element off
  * @retval		non-zero	Cut the Heating element On
  */
-uint8_t HE_PID(int16_t i16_bTemp, int16_t i16_tTemp, uint8_t reset);
+uint16_t HE_PID(int16_t i16_bTemp, int16_t i16_tTemp, uint8_t reset);
 
 
 #endif /* HE_PID_H_ */

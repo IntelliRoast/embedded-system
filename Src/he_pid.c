@@ -16,12 +16,12 @@
  * @retval		0			Cut the Heating element off
  * @retval		non-zero	Cut the Heating element On
  */
-uint8_t HE_PID(int16_t i16_bTemp, int16_t i16_tTemp, uint8_t reset) {
+uint16_t HE_PID(int16_t i16_bTemp, int16_t i16_tTemp, uint8_t reset) {
 	static float f_Error;
 	static float f_lastError;
 	static float f_Integral;
 	static float f_Derivative;
-	int16_t i16_PWM;
+	float f_PWM;
 
 	/* Calculate Proportional component */
 	f_Error = i16_tTemp - i16_bTemp;
@@ -30,11 +30,11 @@ uint8_t HE_PID(int16_t i16_bTemp, int16_t i16_tTemp, uint8_t reset) {
 	/* Calculate Derivative component */
 	f_Derivative = f_Error - f_lastError;
 
-	i16_PWM = (Kp * f_Error) + (Ki * f_Integral) + (Kd * f_Derivative);
+	f_PWM = (Kp * f_Error) + (Ki * f_Integral) + (Kd * f_Derivative);
 
-	if (i16_PWM > 255) i16_PWM = 255;
-	if (i16_PWM < 0) i16_PWM = 0;
+	if (f_PWM > 65536) f_PWM = 65536;
+	if (f_PWM < 0) f_PWM = 0;
 
-	return (uint8_t) i16_PWM;
+	return (uint16_t) f_PWM;
 }
 

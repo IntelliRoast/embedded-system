@@ -56,9 +56,7 @@
 /* USER CODE BEGIN Includes */
 #include "stdint.h"
 #include "string.h"
-#include "max31855.h"
-#include "he_pid.h"
-#include "data_types.h"
+
 
 /* USER CODE END Includes */
 
