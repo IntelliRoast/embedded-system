@@ -51,10 +51,13 @@
 #include "cmsis_os.h"
 
 /* USER CODE BEGIN Includes */
+#include "stdint.h"
+#include "string.h"
 #include "max31855.h"
 #include "he_pid.h"
 #include "data_types.h"
 #include "DefaultRoasts.h"
+#include "jsmn.h"
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -81,6 +84,8 @@ osMutexId btSerial_mutexHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
+static profile_t (*Profile)[];
+static progress_t Progress;
 
 /* USER CODE END PV */
 
@@ -125,6 +130,13 @@ int main(void) {
 	HAL_Init();
 
 	/* USER CODE BEGIN Init */
+	Progress.State = idle;
+	Progress.time = 0;
+	Progress.bt = 0;
+	Progress.st = 0;
+	Progress.et = 0;
+	Progress.dc = 0;
+	Profile = &TestRoast;
 
 	/* USER CODE END Init */
 
@@ -175,28 +187,26 @@ int main(void) {
 	osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 128);
 	defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
-	/* definition and creation of RoastTask */
-	osThreadDef(RoastTask, StartRoastTask, osPriorityAboveNormal, 0, 256);
-	RoastTaskHandle = osThreadCreate(osThread(RoastTask), NULL);
+
 
 	/* definition and creation of commTask */
-	//osThreadDef(commTask, StartCommTask, osPriorityBelowNormal, 0, 128);
-	//commTaskHandle = osThreadCreate(osThread(commTask), NULL);
+	osThreadDef(commTask, StartCommTask, osPriorityBelowNormal, 0, 128);
+	commTaskHandle = osThreadCreate(osThread(commTask), NULL);
 	/* USER CODE BEGIN RTOS_THREADS */
 	/* add threads, ... */
 	/* USER CODE END RTOS_THREADS */
 
-	/* Create the queue(s) */
-	/* definition and creation of transmittQueue */
-	/* what about the sizeof here??? cd native code */
-	osMessageQDef(transmittQueue, 16, progress_t);
+	/* Create the queue(s)
+	 definition and creation of transmittQueue
+	 what about the sizeof here??? cd native code
+	osMessageQDef(transmittQueue, 16, struct progress);
 	transmittQueueHandle = osMessageCreate(osMessageQ(transmittQueue), NULL);
 
-	/* definition and creation of recieveQueue */
-	/* what about the sizeof here??? cd native code */
-	osMessageQDef(recieveQueue, 16, profile_t);
+	 definition and creation of recieveQueue
+	 what about the sizeof here??? cd native code
+	osMessageQDef(recieveQueue, 16, struct profile);
 	recieveQueueHandle = osMessageCreate(osMessageQ(recieveQueue), NULL);
-
+*/
 	/* USER CODE BEGIN RTOS_QUEUES */
 	/* add queues, ... */
 	/* USER CODE END RTOS_QUEUES */
@@ -335,9 +345,9 @@ static void MX_TIM2_Init(void) {
 	TIM_OC_InitTypeDef sConfigOC;
 
 	htim2.Instance = TIM2;
-	htim2.Init.Prescaler = 59999;
+	htim2.Init.Prescaler = 60000;
 	htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim2.Init.Period = 999;
+	htim2.Init.Period = 2000;
 	htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_PWM_Init(&htim2) != HAL_OK) {
@@ -372,9 +382,9 @@ static void MX_TIM3_Init(void) {
 	TIM_OC_InitTypeDef sConfigOC;
 
 	htim3.Instance = TIM3;
-	htim3.Init.Prescaler = 29999;
+	htim3.Init.Prescaler = 0;
 	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim3.Init.Period = 0;
+	htim3.Init.Period = 4096;
 	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_Base_Init(&htim3) != HAL_OK) {
@@ -419,7 +429,7 @@ static void MX_TIM4_Init(void) {
 	htim4.Instance = TIM4;
 	htim4.Init.Prescaler = 0;
 	htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim4.Init.Period = 0;
+	htim4.Init.Period = 4096;
 	htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_PWM_Init(&htim4) != HAL_OK) {
@@ -486,7 +496,7 @@ void MX_USART3_UART_Init(void) {
 static void MX_DMA_Init(void) {
 	/* DMA controller clock enable */
 	__HAL_RCC_DMA1_CLK_ENABLE()
-	;
+									;
 
 	/* DMA interrupt init */
 	/* DMA1_Stream5_IRQn interrupt configuration */
@@ -594,15 +604,29 @@ void setPWM(TIM_HandleTypeDef timer, uint32_t channel, uint16_t period,
 void StartDefaultTask(void const * argument) {
 
 	/* USER CODE BEGIN 5 */
-	char temp_msg[80];
-	sprintf(temp_msg, "IntelliRoast initializing\n\n");
-	HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
+	HAL_UART_Transmit_DMA(&huart3, "IntelliRoast initializing\n\n", 29);
 
-	osDelay(5000);
-	osSignalSet(RoastTaskHandle, 0x1); //Signal the start of the roast
-	osSignalWait(0x1, osWaitForever);
+	unsigned int Connected = 0;
+
+	osDelay(3000);
+	/* definition and creation of RoastTask */
+	osThreadDef(RoastTask, StartRoastTask, osPriorityAboveNormal, 0, 256);
+	RoastTaskHandle = osThreadCreate(osThread(RoastTask), NULL);
 	/* Infinite loop */
 	for (;;) {
+		char temp_msg[100] = {0};
+		HAL_UART_Receive(&huart2,temp_msg, 100, 0xFFF);
+		if (strlen(temp_msg) != 0) {
+			HAL_UART_Transmit(&huart3, '1',1,0xFFF);
+			jsmn_parser parser;
+			jsmntok_t tokens[100];
+			jsmn_init(&parser);
+
+			// js - pointer to JSON string
+			// tokens - an array of tokens available
+			// 10 - number of tokens available
+			jsmn_parse(&parser, temp_msg, strlen(temp_msg), tokens, 100);
+		}
 		osDelay(10);
 	}
 
@@ -618,157 +642,160 @@ void StartRoastTask(void const * argument) {
 	HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
 
 	uint8_t spi_data[4] = { 0 };
-	int bean_temp;
-	int expected_bean_temp;
-	int element_temp;
 	float slope;
 	uint16_t heDutyCycle;
-	int heDutyCyclePercentage;
-	int u8_len;
-	int current_time;
-	int time;
-	int current_point;
-
 	char temp_msg[80] = { 0 };
-	char tcError_msg[80];
 
-	sprintf(temp_msg, "Roast Starting\n\n");
-	HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
+	Progress.State = roasting;
 
 	//TODO: Set Fan Speed to Agitation
 
-	while (1) {
-		osSignalWait(0x1, osWaitForever); // wait till roast is signaled to begin by defaultTask;
-		time = 0;
-		current_point = 1;
-		/* Infinite loop */
-		for (; current_point < ROASTLEN; current_point++) {
-			for (current_time = 0; current_time < MediumRoast[current_point].time; current_time++) {
-				time++;
-				HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
+	/* Infinite loop */
+	for (int current_point = 1; current_point < 6; current_point++) {
+		for (int current_time = 0; Progress.time < (*Profile)[current_point].time; current_time++) {
+			HAL_GPIO_TogglePin(LD2_GPIO_Port, LD2_Pin);
 
-				//calculate slope
-				int delta_temp = MediumRoast[current_point].temp - MediumRoast[current_point-1].temp;
-				int delta_time = MediumRoast[current_point].time - MediumRoast[current_point-1].time;
-				slope = (float) delta_temp / delta_time;
-				expected_bean_temp = (slope * current_time) + MediumRoast[current_point-1].temp;
+			//calculate slope
+			int delta_temp = (*Profile)[current_point].temp - (*Profile)[current_point-1].temp;
+			int delta_time = (*Profile)[current_point].time - (*Profile)[current_point-1].time;
+			slope = (float) delta_temp / delta_time;
+			Progress.st = (slope * current_time) + (*Profile)[current_point-1].temp;
 
-				//Gather Bean Temp
-				HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
-				HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-				HAL_Delay(1);
-				HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
-				if (max31855_Error(spi_data)) {
-					if (max31855_Disconnected(spi_data)) {
-						sprintf(tcError_msg,
-								"ERROR: Bean Thermocouple Disconnected\n");
-					} else if (max31855_ShortVCC(spi_data)) {
-						sprintf(tcError_msg,
-								"ERROR: Bean Thermocouple Shorted to VCC\n");
-					} else if (max31855_ShortGND(spi_data)) {
-						sprintf(tcError_msg,
-								"ERROR: Bean Thermocouple Shorted to GND\n");
-					} else {
-						sprintf(tcError_msg,
-								"ERROR: Bean Thermocouple has unknown error\n");
-					}
-					HAL_UART_Transmit(&huart3, (uint8_t*) tcError_msg,
-							strlen(tcError_msg), 0xFFF);
-				}
-				bean_temp = max31855toCelcius(spi_data);
-
-				//Gather Heating Element Temp
-				HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_RESET);
-				HAL_Delay(1);
-				HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-				HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
-				if (max31855_Error(spi_data)) {
-					if (max31855_Disconnected(spi_data)) {
-						sprintf(tcError_msg,
-								"ERROR: HE Thermocouple Disconnected\n");
-					} else if (max31855_ShortVCC(spi_data)) {
-						sprintf(tcError_msg,
-								"ERROR: HE Thermocouple Shorted to VCC\n");
-					} else if (max31855_ShortGND(spi_data)) {
-						sprintf(tcError_msg,
-								"ERROR: HE Thermocouple Shorted to GND\n");
-					} else {
-						sprintf(tcError_msg,
-								"ERROR: HE Thermocouple has unknown error\n");
-					}
-					HAL_UART_Transmit(&huart3, (uint8_t*) tcError_msg,
-							strlen(tcError_msg), 0xFFF);
-				}
-				element_temp = max31855toCelcius(spi_data);
-
-				heDutyCycle = HE_PID(bean_temp, expected_bean_temp, 0);
-				heDutyCyclePercentage = ((float) heDutyCycle * 100) / 65536;
-				setPWM(htim2, TIM_CHANNEL_1, 999, heDutyCycle);
-
-				//sprintf(temp_msg, "Time: %d, BT: %d, ST: %d, ET: %d, DC: %d\n", time, bean_temp, expected_bean_temp, element_temp, (int) heDutyCyclePercentage);
-				sprintf(temp_msg, "%d,%d,%d,%d,%d\n",time, bean_temp, expected_bean_temp, element_temp, (int) heDutyCyclePercentage);
-
-				u8_len = strlen(temp_msg);
-				HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, u8_len, 0xFFF);
-				sprintf(temp_msg, "%d,%d,%d,%d,%d\n", time, bean_temp,
-						expected_bean_temp, element_temp,
-						(int) heDutyCyclePercentage);
-				HAL_UART_Transmit(&huart2, (uint8_t*) temp_msg, u8_len, 0xFFF);
-				osDelay(1000);
-			}
-		}
-
-		//Finish up roast by cooling off beans
-		setPWM(htim2, TIM_CHANNEL_1, 999, 0);
-
-		//TODO: Set fan pwm to cooling speed
-
-		while(bean_temp > 30){
+			//Gather Bean Temp
 			HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
 			HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 			HAL_Delay(1);
 			HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
 			if (max31855_Error(spi_data)) {
 				if (max31855_Disconnected(spi_data)) {
-					sprintf(tcError_msg, "ERROR: Bean Thermocouple Disconnected\n");
+					sprintf(temp_msg,
+							"ERROR: Bean Thermocouple Disconnected\n");
 				} else if (max31855_ShortVCC(spi_data)) {
-					sprintf(tcError_msg,
+					sprintf(temp_msg,
 							"ERROR: Bean Thermocouple Shorted to VCC\n");
 				} else if (max31855_ShortGND(spi_data)) {
-					sprintf(tcError_msg,
+					sprintf(temp_msg,
 							"ERROR: Bean Thermocouple Shorted to GND\n");
 				} else {
-					sprintf(tcError_msg,
+					sprintf(temp_msg,
 							"ERROR: Bean Thermocouple has unknown error\n");
 				}
-				HAL_UART_Transmit(&huart3, (uint8_t*) tcError_msg,
-						strlen(tcError_msg), 0xFFF);
+				HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,
+						strlen(temp_msg), 0xFFF);
 			}
-			bean_temp = max31855toCelcius(spi_data);
+			Progress.bt = max31855toCelcius(spi_data);
+
+			//Gather Heating Element Temp
+			HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_RESET);
+			HAL_Delay(1);
+			HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
+			HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
+			if (max31855_Error(spi_data)) {
+				if (max31855_Disconnected(spi_data)) {
+					sprintf(temp_msg,
+							"ERROR: HE Thermocouple Disconnected\n");
+				} else if (max31855_ShortVCC(spi_data)) {
+					sprintf(temp_msg,
+							"ERROR: HE Thermocouple Shorted to VCC\n");
+				} else if (max31855_ShortGND(spi_data)) {
+					sprintf(temp_msg,
+							"ERROR: HE Thermocouple Shorted to GND\n");
+				} else {
+					sprintf(temp_msg,
+							"ERROR: HE Thermocouple has unknown error\n");
+				}
+				HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,
+						strlen(temp_msg), 0xFFF);
+			}
+			Progress.et = max31855toCelcius(spi_data);
+
+			heDutyCycle = HE_PID(Progress.bt, Progress.st, 0);
+			Progress.dc = ((float) heDutyCycle * 100) / 65536;
+			setPWM(htim2, TIM_CHANNEL_1, 999, heDutyCycle);
+
+			//sprintf(temp_msg, "Time: %d, BT: %d, ST: %d, ET: %d, DC: %d\n", time, Progress.bt, Progress.st, Progress.et, (int) heDutyCyclePercentage);
+			sprintf(temp_msg, "%d,%d,%d,%d,%d\n",Progress.time, Progress.bt, Progress.st, Progress.et, Progress.dc);
+			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF); //Serial Port
+
+			if ((Progress.bt >= (*Profile)[5].temp) || (Progress.time >= (*Profile)[5].time)) {
+				Progress.State = cooling;
+				break;
+			}
+
+			Progress.time++;
+			osDelay(1000);
 		}
 
-		//TODO: Eject Beans
-
-		sprintf(temp_msg, "ROAST_FINISHED\n");
-		HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, u8_len, 0xFFF);
-		osSignalSet(defaultTaskHandle, 0x1);
+		if (Progress.State != roasting) {
+			break;
+		}
 	}
+
+	/* Finish up roast by cooling off beans */
+	setPWM(htim2, TIM_CHANNEL_1, 2000, 0); // cut off heater
+	setPWM(htim3, TIM_CHANNEL_1, 2048, COOLING_DC); //TODO: Find correct percentage.
+
+	do{
+		HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
+		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
+		HAL_Delay(1);
+		HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
+		if (max31855_Error(spi_data)) {
+			if (max31855_Disconnected(spi_data)) {
+				sprintf(temp_msg, "ERROR: Bean Thermocouple Disconnected\n");
+			} else if (max31855_ShortVCC(spi_data)) {
+				sprintf(temp_msg,
+						"ERROR: Bean Thermocouple Shorted to VCC\n");
+			} else if (max31855_ShortGND(spi_data)) {
+				sprintf(temp_msg,
+						"ERROR: Bean Thermocouple Shorted to GND\n");
+			} else {
+				sprintf(temp_msg,
+						"ERROR: Bean Thermocouple has unknown error\n");
+			}
+			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,
+					strlen(temp_msg), 0xFFF);
+		}
+		Progress.bt = max31855toCelcius(spi_data);
+	} while(Progress.bt > 40 && Progress.State == cooling);
+
+	setPWM(htim3, TIM_CHANNEL_1, 2048, EJECT_DC); //Set fan to full power to eject.
+
+	sprintf(temp_msg, "ROAST_FINISHED\n");
+	HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
 	/* USER CODE END StartRoastTask */
 }
 
 /* StartCommTask function */
 void StartCommTask(void const * argument) {
 	/* USER CODE BEGIN StartCommTask */
+	char temp_msg[80] = {0};
+	char state_str[20] = {0};
 	/* Infinite loop */
 	for (;;) {
-		osEvent evt = osMessageGet(transmittQueueHandle, 5);
-		if (evt.status == osEventMessage) {
-			progress_t *progress = (progress_t *) evt.value.p;
-			HAL_UART_Transmit_DMA(&huart2, (uint8_t*) progress,
-					sizeof(progress_t));
+		osSignalWait(0x1, osWaitForever);
+		switch(Progress.State){
+		case idle:
+			sprintf(state_str,"Idle");
+			break;
+		case roasting:
+			sprintf(state_str,"Roasting");
+			break;
+		case cooling:
+			sprintf(state_str,"Cooling");
+			break;
+		case ejecting:
+			sprintf(state_str,"Ejecting");
+			break;
 		}
-
-		osDelay(1);
+		sprintf(temp_msg, "{\"state\":\"%s\",\"T\":%d,\"BT\":%d,\"ST\":%d,\"ET\":%d,\"DC\":%d}",
+							state_str,
+							Progress.time,
+							Progress.bt,
+							Progress.st,
+							Progress.et,
+							Progress.dc);
+		HAL_UART_Transmit_DMA(&huart2, (uint8_t *) temp_msg, strlen(temp_msg));
 	}
 	/* USER CODE END StartCommTask */
 }

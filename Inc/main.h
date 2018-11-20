@@ -54,8 +54,7 @@
 /* Includes ------------------------------------------------------------------*/
 
 /* USER CODE BEGIN Includes */
-#include "stdint.h"
-#include "string.h"
+
 
 
 /* USER CODE END Includes */
@@ -99,6 +98,11 @@
 /* #define USE_FULL_ASSERT    1U */
 
 /* USER CODE BEGIN Private defines */
+
+#define ROAST_DC 23000 // 35% power
+#define COOLING_DC 43000 // 70% power
+#define EJECT_DC 65535 // full power
+
 
 /* USER CODE END Private defines */
 
