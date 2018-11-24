@@ -98,6 +98,8 @@
 /* #define USE_FULL_ASSERT    1U */
 
 /* USER CODE BEGIN Private defines */
+#define LD1_Pin GPIO_PIN_0
+#define LD1_GPIO_Port GPIOB
 
 #define ROAST_DC 23000 // 35% power
 #define COOLING_DC 43000 // 70% power
