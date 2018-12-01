@@ -60,6 +60,11 @@
 #include "data_types.h"
 #include "DefaultRoasts.h"
 #include "jsmn.h"
+
+#define ROAST_DC 375 // 30% power
+#define COOLING_DC 300 // 70% power
+#define EJECT_DC 1000 // full power
+
 /* USER CODE END Includes */
 
 /* Private variables ---------------------------------------------------------*/
@@ -86,8 +91,10 @@ osMutexId btSerial_mutex;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
+osMutexId progressMutex;
 static profile_t (*Profile)[];
 static progress_t Progress;
+static int reset_roast;
 
 /* USER CODE END PV */
 
@@ -137,6 +144,8 @@ int main(void) {
 	Progress.st = 0;
 	Progress.et = 0;
 	Progress.dc = 0;
+	Progress.fs = 0;
+	Progress.send_update = 0;
 	Profile = &MediumRoast;
 
 	/* USER CODE END Init */
@@ -171,7 +180,8 @@ int main(void) {
 	btSerial_mutex = osMutexCreate(osMutex(btSerial_mutex));
 
 	/* USER CODE BEGIN RTOS_MUTEX */
-	/* add mutexes, ... */
+	osMutexDef(progressMutex);
+	progressMutex = osMutexCreate(osMutex(progressMutex));
 	/* USER CODE END RTOS_MUTEX */
 
 	/* USER CODE BEGIN RTOS_SEMAPHORES */
@@ -184,7 +194,7 @@ int main(void) {
 
 	/* Create the thread(s) */
 	/* definition and creation of defaultTask */
-	osThreadDef(defaultTask, StartDefaultTask, osPriorityBelowNormal, 0, 2048);
+	osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 2048);
 	defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
 
@@ -349,9 +359,9 @@ static void MX_TIM2_Init(void) {
 	TIM_OC_InitTypeDef sConfigOC;
 
 	htim2.Instance = TIM2;
-	htim2.Init.Prescaler = 59999;
+	htim2.Init.Prescaler = 60000;
 	htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim2.Init.Period = 999;
+	htim2.Init.Period = 1000;
 	htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_PWM_Init(&htim2) != HAL_OK) {
@@ -386,7 +396,7 @@ static void MX_TIM3_Init(void) {
 	htim3.Instance = TIM3;
 	htim3.Init.Prescaler = 0;
 	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim3.Init.Period = 4096;
+	htim3.Init.Period = 1024;
 	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_PWM_Init(&htim3) != HAL_OK) {
@@ -422,7 +432,7 @@ static void MX_TIM4_Init(void) {
 	htim4.Instance = TIM4;
 	htim4.Init.Prescaler = 0;
 	htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim4.Init.Period = 4096;
+	htim4.Init.Period = 2048;
 	htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
 	htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
 	if (HAL_TIM_PWM_Init(&htim4) != HAL_OK) {
@@ -578,6 +588,21 @@ static int jsoneq(const char *json, jsmntok_t *tok, const char *s) {
 	return 0;
 }
 
+/*static void storeRoast(uint8_t data[]) {
+	//TODO: STORE ROAST PROFILE IN FLASH MEMORY
+	HAL_FLASH_Unlock();
+
+	__HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_EOP | FLASH_FLAG_OPERR | FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR | FLASH_FLAG_PGSERR );
+
+	FLASH_Erase_Sector(FLASH_SECTOR_11, VOLTAGE_RANGE_3);
+	int i;
+	for (i = 0; i < 6; ++i) {
+		HAL_FLASH_Program(TYPEPROGRAM_WORD, (uint8_t) customRoast[i], data[i]);
+	}
+
+	HAL_FLASH_Lock();
+}*/
+
 static char * state_str(char *buf) {
 	switch(Progress.State){
 	case roasting:
@@ -588,6 +613,9 @@ static char * state_str(char *buf) {
 		break;
 	case ejecting:
 		strcpy(buf,"Ejecting");
+		break;
+	case manual:
+		strcpy(buf,"Manual");
 		break;
 	default: //idle
 		strcpy(buf,"Idle");
@@ -608,11 +636,10 @@ void StartDefaultTask(void const * argument)
 
 
 	osThreadDef(RoastTask, StartRoastTask, osPriorityAboveNormal, 0, 512);
+	RoastTaskHandle = osThreadCreate(osThread(RoastTask), NULL);
 	osThreadDef(commTask, StartCommTask, osPriorityNormal, 0, 512);
+ 	commTaskHandle = osThreadCreate(osThread(commTask), NULL);
 
-	setPWM(htim3, TIM_CHANNEL_1, 4048, ROAST_DC); //Set fan to full power to eject.
-
-	unsigned int Connected = 0;
 
 	/* Infinite loop */
 	for (;;) {
@@ -620,7 +647,7 @@ void StartDefaultTask(void const * argument)
 		char receive_msg[100] = {0};
 		char transmit_msg[100] = {0};
 		osMutexWait(btSerial_mutex,osWaitForever);
-		HAL_UART_Receive(&huart2,(uint8_t *)receive_msg, 100, 0x0FF);
+		HAL_UART_Receive(&huart2,(uint8_t *)receive_msg, 100, 0xFFF);
 		osMutexRelease(btSerial_mutex);
 		if (strlen(receive_msg) != 0) {
 			jsmn_parser parser;
@@ -632,91 +659,176 @@ void StartDefaultTask(void const * argument)
 			// tokens - an array of tokens available
 			// 10 - number of tokens available
 			toknum = jsmn_parse(&parser, receive_msg, strlen(receive_msg), tokens, 100);
-			if (toknum < 0) { //if there is an error parsing the data;
-				switch(toknum){
-				case JSMN_ERROR_INVAL:
-					sprintf(transmit_msg, "JSMN_ERROR_INVAL: %s", receive_msg);
-					break;
-				case JSMN_ERROR_NOMEM:
-					sprintf(transmit_msg, "JSMN_ERROR_NOMEM: %s", receive_msg);
-					break;
-				case JSMN_ERROR_PART:
-					sprintf(transmit_msg, "JSMN_ERROR_PART: %s", receive_msg);
-					break;
-				default:
-					sprintf(transmit_msg, "JSMN_UNDIFINED_ERROR: %d", toknum);
-					break;
-				}
-				HAL_UART_Transmit(&huart3, (uint8_t*)transmit_msg,strlen(transmit_msg),0xFFF); //log error to serial.
-			}
+
+
 			if (toknum < 1 || tokens[0].type != JSMN_OBJECT) {
-				sprintf(transmit_msg, "TOP LEVEL TOKEN NOT AN OBJECT");
-				HAL_UART_Transmit(&huart3, (uint8_t*)transmit_msg,strlen(transmit_msg),0xFFF); //log error to serial.
-			}
+			} else {
+				if(jsoneq(receive_msg, &tokens[2], "Connected")) {
+					HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
+					char str[8] = {0};
+					sprintf(transmit_msg, "{\"cmd\":\"Ack\",\"state\":\"%s\"}\n", state_str(str));
+					osMutexWait(btSerial_mutex,osWaitForever);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
+					osMutexRelease(btSerial_mutex);
+				}
 
-			if(jsoneq(receive_msg, &tokens[2], "Connected")) {
-				HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
-				char str[8] = {0};
-				sprintf(transmit_msg, "{\"cmd\":\"Ack\",\"state\":\"%s\"}", state_str(str));
-				Connected = 1;
-				osMutexWait(btSerial_mutex,osWaitForever);
-				HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-				osMutexRelease(btSerial_mutex);
-				commTaskHandle = osThreadCreate(osThread(commTask), NULL);
-			}
+				if(jsoneq(receive_msg, &tokens[2], "Load")) {
+					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
+					osMutexWait(btSerial_mutex,osWaitForever);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
+					osMutexRelease(btSerial_mutex);
 
-			if(jsoneq(receive_msg, &tokens[2], "Load")) {
-				sprintf(transmit_msg, "{\"cmd\":\"Ack\"}");
-				osMutexWait(btSerial_mutex,osWaitForever);
-				HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-				osMutexRelease(btSerial_mutex);
-				if(Progress.State != roasting) {
-					if(jsoneq(receive_msg, &tokens[3], "custom")) {
-						//TODO: Handle Custom Roast Loading
-					} else { //Default Roast
-						int roast = strtol(receive_msg + tokens[4].start, NULL, 10);
-						switch (roast){
-						case 1:
-							Profile = &LightRoast;
-							break;
-						case 3:
-							Profile = &DarkRoast;
-							break;
-						default: //default is 2
-							Profile = &MediumRoast;
-							break;
+					osMutexWait(progressMutex,osWaitForever);
+					if(Progress.State != roasting) {
+						if(jsoneq(receive_msg, &tokens[3], "custom")) {
+							//TODO: Handle Custom Roast Loading
+						} else { //Default Roast
+							int roast = strtol(receive_msg + tokens[4].start, NULL, 10);
+							switch (roast){
+							case 1:
+								Profile = &LightRoast;
+								break;
+							case 3:
+								Profile = &DarkRoast;
+								break;
+							default: //default is 2
+								Profile = &MediumRoast;
+								break;
+							}
 						}
 					}
+					osMutexRelease(progressMutex);
 				}
-			}
 
-			if(jsoneq(receive_msg, &tokens[2], "Start")){
-				if(Progress.State == idle) {
-					//osThreadTerminate(RoastTaskHandle);
-					RoastTaskHandle = osThreadCreate(osThread(RoastTask), NULL);
+				if(jsoneq(receive_msg, &tokens[2], "Start")){
+					if(Progress.State == idle) {
+						osMutexWait(progressMutex,osWaitForever);
+						reset_roast = 1;
+						Progress.State = roasting;
+						osMutexRelease(progressMutex);
+					}
+					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
+					osMutexWait(btSerial_mutex,osWaitForever);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
+					osMutexRelease(btSerial_mutex);
 				}
-				sprintf(transmit_msg, "{\"cmd\":\"Ack\"}");
-				osMutexWait(btSerial_mutex,osWaitForever);
-				HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-				osMutexRelease(btSerial_mutex);
-			}
 
-			if(jsoneq(receive_msg, &tokens[2], "Stop")) {
-				if(Progress.State == roasting) Progress.State = cooling;
-				sprintf(transmit_msg, "{\"cmd\":\"Ack\"}");
-				osMutexWait(btSerial_mutex,osWaitForever);
-				HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-				osMutexRelease(btSerial_mutex);
-			}
+				if(jsoneq(receive_msg, &tokens[2], "Cool")) {
+					osMutexWait(progressMutex,osWaitForever);
+					if(Progress.State == roasting || Progress.State == manual) Progress.State = cooling;
+					osMutexRelease(progressMutex);
 
-			if(jsoneq(receive_msg, &tokens[2], "Eject")) {
-				if(Progress.State == roasting) Progress.State = ejecting;
-				sprintf(transmit_msg, "{\"cmd\":\"Ack\"}");
-				osMutexWait(btSerial_mutex,osWaitForever);
-				HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-				osMutexRelease(btSerial_mutex);
+					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
+					osMutexWait(btSerial_mutex,osWaitForever);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
+					osMutexRelease(btSerial_mutex);
+				}
+				if(jsoneq(receive_msg, &tokens[2], "Stop")) {
+					osMutexWait(progressMutex,osWaitForever);
+					Progress.State = idle;
+					osMutexRelease(progressMutex);
+
+					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
+					osMutexWait(btSerial_mutex,osWaitForever);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
+					osMutexRelease(btSerial_mutex);
+				}
+
+				if(jsoneq(receive_msg, &tokens[2], "Eject")) {
+					osMutexWait(progressMutex,osWaitForever);
+					Progress.State = ejecting;
+					osMutexRelease(progressMutex);
+
+					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
+					osMutexWait(btSerial_mutex,osWaitForever);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
+					osMutexRelease(btSerial_mutex);
+				}
+
+				if(jsoneq(receive_msg, &tokens[2], "Manual")) {
+					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
+					osMutexWait(btSerial_mutex,osWaitForever);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
+					osMutexRelease(btSerial_mutex);
+
+					osMutexWait(progressMutex,osWaitForever);
+					Progress.State = manual;
+					if (toknum > 5) { // Fan and Power are set in same Message
+						if (jsoneq(receive_msg, &tokens[3], "fan")) {
+							Progress.fs = atoi(&receive_msg[tokens[4].start]);
+							Progress.dc = atoi(&receive_msg[tokens[6].start]);
+						} else {
+							Progress.fs = atoi(&receive_msg[tokens[6].start]);
+							Progress.dc = atoi(&receive_msg[tokens[4].start]);
+						}
+					} else if (jsoneq(receive_msg, &tokens[3], "fan")) {
+						Progress.fs = atoi(&receive_msg[tokens[4].start]);
+					} else if (jsoneq(receive_msg, &tokens[3], "power")) {
+						Progress.dc = atoi(&receive_msg[tokens[4].start]);
+					}
+					osMutexRelease(progressMutex);
+				}
+
+
+				/* Infinite loop */
+
 			}
 		}
+		char bluetooth_msg[80] = {0};
+		char serial_msg[80] = {0};
+		char state_string[20] = {0};
+		osMutexWait(progressMutex,osWaitForever);
+		if (Progress.send_update) {
+			Progress.send_update = 0;
+			state_str(state_string);
+
+			/*switch(Progress.State){
+			case idle:
+				sprintf(state_string,"Idle");
+				break;
+			case roasting:
+				sprintf(state_string,"Roasting");
+				break;
+			case cooling:
+				sprintf(state_string,"Cooling");
+				break;
+			case ejecting:
+				sprintf(state_string,"Ejecting");
+				break;
+			case manual:
+				sprintf(state_string,"Manual");
+				break;
+			}*/
+
+			//Bluetooth Message
+			sprintf(bluetooth_msg, "{\"state\":\"%s\",\"T\":%d,\"BT\":%d,\"ST\":%d,\"ET\":%d,\"DC\":%d,\"FS\":%d}\n",
+					state_str,
+					Progress.time,
+					Progress.bt,
+					Progress.st,
+					Progress.et,
+					Progress.dc,
+					Progress.fs);
+			//Send Bluetooth
+			osMutexWait(btSerial_mutex,osWaitForever);
+			HAL_UART_Transmit(&huart2, (uint8_t *) bluetooth_msg, strlen(bluetooth_msg),0xFFF);
+			osMutexRelease(btSerial_mutex);
+			//Serial Message
+			sprintf(serial_msg, "%s,%d,%d,%d,%d,%d,%d\n",
+					state_str,
+					Progress.time,
+					Progress.bt,
+					Progress.st,
+					Progress.et,
+					Progress.dc,
+					Progress.fs);
+			//Send Serial
+			osMutexWait(wireSerial_mutex,osWaitForever);
+			HAL_UART_Transmit(&huart3, (uint8_t*) serial_msg, strlen(serial_msg), 0xFFF); //Serial Port
+			osMutexRelease(wireSerial_mutex);
+
+		}
+		osMutexRelease(progressMutex);
 	}
 
   /* USER CODE END 5 */ 
@@ -735,95 +847,24 @@ void StartRoastTask(void const * argument)
 	float slope;
 	uint16_t heDutyCycle;
 	char temp_msg[80] = { 0 };
+	int current_point = 1;
+	int ejection_time = 0;
+	float fan_offset = 0;
 
-	Progress.State = roasting;
-	Progress.time = 0;
-	Progress.st = 0;
-
-	//TODO: Set Fan Speed to Agitation
-
-	/* Infinite loop */
-	for (int current_point = 1; current_point < 6 && Progress.State == roasting; current_point++) {
-		for (int current_time = 0; Progress.time < (*Profile)[current_point].time && Progress.State == roasting; current_time++) {
-			HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
-
-			//calculate slope
-			int delta_temp = (*Profile)[current_point].temp - (*Profile)[current_point-1].temp;
-			int delta_time = (*Profile)[current_point].time - (*Profile)[current_point-1].time;
-			slope = (float) delta_temp / delta_time;
-			Progress.st = (slope * current_time) + (*Profile)[current_point-1].temp;
-
-			//Gather Bean Temp
-			HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
-			HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-			HAL_Delay(1);
-			HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
-			if (max31855_Error(spi_data)) {
-				if (max31855_Disconnected(spi_data)) {
-					sprintf(temp_msg,
-							"ERROR: Bean Thermocouple Disconnected\n");
-				} else if (max31855_ShortVCC(spi_data)) {
-					sprintf(temp_msg,
-							"ERROR: Bean Thermocouple Shorted to VCC\n");
-				} else if (max31855_ShortGND(spi_data)) {
-					sprintf(temp_msg,
-							"ERROR: Bean Thermocouple Shorted to GND\n");
-				} else {
-					sprintf(temp_msg,
-							"ERROR: Bean Thermocouple has unknown error\n");
-				}
-				HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,
-						strlen(temp_msg), 0xFFF);
-			}
-			Progress.bt = max31855toCelcius(spi_data);
-
-			//Gather Heating Element Temp
-			HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_RESET);
-			HAL_Delay(1);
-			HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-			HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
-			if (max31855_Error(spi_data)) {
-				if (max31855_Disconnected(spi_data)) {
-					sprintf(temp_msg,
-							"ERROR: HE Thermocouple Disconnected\n");
-				} else if (max31855_ShortVCC(spi_data)) {
-					sprintf(temp_msg,
-							"ERROR: HE Thermocouple Shorted to VCC\n");
-				} else if (max31855_ShortGND(spi_data)) {
-					sprintf(temp_msg,
-							"ERROR: HE Thermocouple Shorted to GND\n");
-				} else {
-					sprintf(temp_msg,
-							"ERROR: HE Thermocouple has unknown error\n");
-				}
-				HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,
-						strlen(temp_msg), 0xFFF);
-			}
-			Progress.et = max31855toCelcius(spi_data);
-
-			heDutyCycle = HE_PID(Progress.bt, Progress.st, 0);
-			Progress.dc = ((float) heDutyCycle * 100) / 65536;
-			setPWM(htim2, TIM_CHANNEL_1, 999, heDutyCycle);
-
-			//sprintf(temp_msg, "Time: %d, BT: %d, ST: %d, ET: %d, DC: %d\n", time, Progress.bt, Progress.st, Progress.et, (int) heDutyCyclePercentage);
-			sprintf(temp_msg, "%d,%d,%d,%d,%d\n",Progress.time, Progress.bt, Progress.st, Progress.et, Progress.dc);
-			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF); //Serial Port
-
-			if ((Progress.bt >= (*Profile)[5].temp) || (Progress.time >= (*Profile)[5].time)) {
-				Progress.State = cooling;
-				break;
-			}
-
-			Progress.time++;
-			osDelay(1000);
+	for (;;) {
+		if (reset_roast) {
+			current_point = 1;
+			ejection_time = 0;
+			osMutexWait(progressMutex,osWaitForever);
+			Progress.time = 0;
+			reset_roast = 0;
+			osMutexRelease(progressMutex);
 		}
-	}
-
-	/* Finish up roast by cooling off beans */
-	 while(Progress.State == cooling) {
+		/* RoastTask HeartBeat. used to verify RoastTask isn't hung for some reason. */
 		HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
-		setPWM(htim2, TIM_CHANNEL_1, 2000, 0); // cut off heater
-		setPWM(htim3, TIM_CHANNEL_1, 2048, COOLING_DC); //TODO: Find correct percentage.
+
+		/* Collect Bean and Element Temperatures */
+		/* Gather Bean Temp */
 		HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 		HAL_Delay(1);
@@ -832,40 +873,144 @@ void StartRoastTask(void const * argument)
 			if (max31855_Disconnected(spi_data)) {
 				sprintf(temp_msg, "ERROR: Bean Thermocouple Disconnected\n");
 			} else if (max31855_ShortVCC(spi_data)) {
-				sprintf(temp_msg,
-						"ERROR: Bean Thermocouple Shorted to VCC\n");
+				sprintf(temp_msg, "ERROR: Bean Thermocouple Shorted to VCC\n");
 			} else if (max31855_ShortGND(spi_data)) {
-				sprintf(temp_msg,
-						"ERROR: Bean Thermocouple Shorted to GND\n");
+				sprintf(temp_msg, "ERROR: Bean Thermocouple Shorted to GND\n");
 			} else {
-				sprintf(temp_msg,
-						"ERROR: Bean Thermocouple has unknown error\n");
+				sprintf(temp_msg, "ERROR: Bean Thermocouple has unknown error\n");
 			}
-			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,
-					strlen(temp_msg), 0xFFF);
+			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,	strlen(temp_msg), 0xFFF);
 		}
+		osMutexWait(progressMutex,osWaitForever);
 		Progress.bt = max31855toCelcius(spi_data);
-		Progress.st = 45;
-		if(Progress.bt < 45) {
-			Progress.State = ejecting;
+		osMutexRelease(progressMutex);
+
+		/* Gather Heating Element Temp */
+		HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_RESET);
+		HAL_Delay(1);
+		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
+		HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
+		if (max31855_Error(spi_data)) {
+			if (max31855_Disconnected(spi_data)) {
+				sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
+			} else if (max31855_ShortVCC(spi_data)) {
+				sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to VCC\n");
+			} else if (max31855_ShortGND(spi_data)) {
+				sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to GND\n");
+			} else {
+				sprintf(temp_msg, "ERROR: HE Thermocouple has unknown error\n");
+			}
+			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
 		}
+		osMutexWait(progressMutex,osWaitForever);
+		Progress.et = max31855toCelcius(spi_data);
+		osMutexRelease(progressMutex);
+
+		if (Progress.State == idle){
+			setPWM(htim2, TIM_CHANNEL_1, 1000, 0);
+			setPWM(htim3, TIM_CHANNEL_1, 1000, 0);
+		}
+
+		if (Progress.State == manual) {
+			if (Progress.bt > 250) {
+				osMutexWait(progressMutex,osWaitForever);
+				Progress.State = cooling;
+				osMutexRelease(progressMutex);
+			} else {
+				setPWM(htim2, TIM_CHANNEL_1, 1000, Progress.dc * 10);
+				setPWM(htim3, TIM_CHANNEL_1, 1000, Progress.fs * 10);
+			}
+		}
+
+		/* Perform Action Based on State */
+		if (Progress.State == roasting) {
+			int total_temp_diff = (*Profile)[5].temp - (*Profile)[0].temp;
+			fan_offset = Progress.bt / total_temp_diff;
+			//if (fan_offset < 0) fan_offset = 0;
+
+			/* Calculate Slope */
+			int previous_point = current_point - 1;
+			int delta_temp = (*Profile)[current_point].temp - (*Profile)[previous_point].temp;
+			int delta_time = (*Profile)[current_point].time - (*Profile)[previous_point].time;
+			slope = (float) delta_temp / delta_time;
+			int current_time = Progress.time - (*Profile)[previous_point].time;
+			if (Progress.time > (*Profile)[5].time){
+				Progress.st = (*Profile)[5].temp;
+			} else {
+				Progress.st = (slope * current_time) + (*Profile)[previous_point].temp;
+			}
+			/* Calculate New PWM Duty Cycle */
+			if (Progress.bt >= Progress.st) heDutyCycle = HE_PID(Progress.bt, Progress.st, 1);
+			else heDutyCycle = HE_PID(Progress.bt, Progress.st, 0);
+			Progress.dc = ((float) heDutyCycle * 100) / 1000;
+			Progress.fs = ((float) ROAST_DC - fan_offset) / 10;
+			setPWM(htim2, TIM_CHANNEL_1, 1000, heDutyCycle); // set HE DC
+			setPWM(htim3, TIM_CHANNEL_1, 1000, ROAST_DC - fan_offset); // Set Fan DC TODO: Find correct percentage.
+
+			/* if Roast temp hits target temp, the Roasting stage is finished. */
+			if ((Progress.bt >= (*Profile)[5].temp) && (Progress.time > (*Profile)[5].time)){ // done roasting when temp hits target temp.
+				osMutexWait(progressMutex,osWaitForever);
+				Progress.State = cooling;
+				osMutexRelease(progressMutex);
+				/* This happens again in the cooling stage, but just in case */
+				/* cut off heater and increase fan speed */
+				setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // cut off heater
+				setPWM(htim3, TIM_CHANNEL_1, 1000, COOLING_DC); //Set fan DC TODO: Find correct percentage.
+			}
+			if(Progress.time >= (*Profile)[current_point].time) current_point++;
+			if (current_point > 5) {
+				current_point = 5; //cap to max index
+			}
+		}
+
+		if (Progress.State == cooling) {
+			/* cut off heater and increase fan speed */
+			setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // Cut off heater
+			setPWM(htim3, TIM_CHANNEL_1, 1000, COOLING_DC); // Set fan DC TODO: Find correct percentage.
+
+			osMutexWait(progressMutex,osWaitForever);
+			Progress.st = 45;
+			Progress.dc = 0;
+			Progress.fs = COOLING_DC / 10;
+			ejection_time = 0;
+			if((Progress.bt < 45) && (Progress.et < 45)) Progress.State = idle;
+			osMutexRelease(progressMutex);
+		}
+
+		if (Progress.State == ejecting) {
+			setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // Cut off heater
+			setPWM(htim3, TIM_CHANNEL_1, 1000, EJECT_DC); // Set fan DC.
+			if (ejection_time >= 20){ //ejection finished
+				/* cut off heater and fan */
+				setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // cut off heater
+				setPWM(htim3, TIM_CHANNEL_1, 1024, 0); // cut off fan.
+				osMutexWait(progressMutex,osWaitForever);
+				Progress.State = idle;
+				Progress.dc = 0;
+				Progress.fs = 100;
+				osMutexRelease(progressMutex);
+				sprintf(temp_msg, "ROAST_FINISHED\n");
+				osMutexWait(wireSerial_mutex,osWaitForever);
+				HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
+				osMutexRelease(wireSerial_mutex);
+			} else {
+				ejection_time++;
+			}
+		}
+
+		osMutexWait(progressMutex,osWaitForever);
+		Progress.send_update = 1;
 		Progress.time++;
+		if (Progress.State == idle) Progress.time = 0; // Reset time if not roasting.
+		osMutexRelease(progressMutex);
+
 		osDelay(1000);
 	}
 
-	for (int i = 0; i < 20 && Progress.State == ejecting; i++ ) {
-		setPWM(htim3, TIM_CHANNEL_1, 2048, EJECT_DC); //Set fan to full power to eject.
-		Progress.time++;
-		osDelay(1000);
-		setPWM(htim3, TIM_CHANNEL_1, 2048, 0); //Turn off Fan
-	}
-
+	/* Should Never hit this Point */
 	Progress.State = idle;
-	sprintf(temp_msg, "ROAST_FINISHED\n");
-	HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
 	HAL_GPIO_WritePin(LD1_GPIO_Port, LD1_Pin, GPIO_PIN_RESET);
-	//vTaskDelete(NULL);
-	osThreadTerminate(osThreadGetId());
+
   /* USER CODE END StartRoastTask */
 }
 
@@ -873,36 +1018,7 @@ void StartRoastTask(void const * argument)
 void StartCommTask(void const * argument)
 {
   /* USER CODE BEGIN StartCommTask */
-	char temp_msg[80] = {0};
-	char state_str[20] = {0};
-	/* Infinite loop */
-	for (;;) {
-		switch(Progress.State){
-		case idle:
-			sprintf(state_str,"Idle");
-			break;
-		case roasting:
-			sprintf(state_str,"Roasting");
-			break;
-		case cooling:
-			sprintf(state_str,"Cooling");
-			break;
-		case ejecting:
-			sprintf(state_str,"Ejecting");
-			break;
-		}
-		sprintf(temp_msg, "{\"state\":\"%s\",\"T\":%d,\"BT\":%d,\"ST\":%d,\"ET\":%d,\"DC\":%d}\n",
-							state_str,
-							Progress.time,
-							Progress.bt,
-							Progress.st,
-							Progress.et,
-							Progress.dc);
-		osMutexWait(btSerial_mutex,osWaitForever);
-		HAL_UART_Transmit(&huart2, (uint8_t *) temp_msg, strlen(temp_msg),0xFFF);
-		osMutexRelease(btSerial_mutex);
-		osDelay(1000);
-	}
+
   /* USER CODE END StartCommTask */
 }
 

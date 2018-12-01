@@ -101,9 +101,6 @@
 #define LD1_Pin GPIO_PIN_0
 #define LD1_GPIO_Port GPIOB
 
-#define ROAST_DC 23000 // 35% power
-#define COOLING_DC 43000 // 70% power
-#define EJECT_DC 65535 // full power
 
 
 /* USER CODE END Private defines */

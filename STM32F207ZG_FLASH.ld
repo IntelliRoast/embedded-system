@@ -40,8 +40,9 @@ _Min_Stack_Size = 0x400; /* required amount of stack */
 /* Specify the memory areas */
 MEMORY
 {
-RAM (xrw)      : ORIGIN = 0x20000000, LENGTH = 128K
-FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 1024K
+RAM (xrw)      	: ORIGIN = 0x20000000, LENGTH = 128K
+FLASH (rx)      : ORIGIN = 0x8000000, LENGTH = 1024K - 128K
+ROAST (RWX)		: ORIGIN = 0x80E0000, LENGTH = 128K
 }
 
 /* Define output sections */
@@ -72,6 +73,14 @@ SECTIONS
     _etext = .;        /* define a global symbols at end of code */
   } >FLASH
 
+  /* Roast Data goes here */
+  .roast_data :
+  {
+  	. = ALIGN(4);
+  	*(.roast_data)
+  	. = ALIGN(4);
+  } >ROAST
+  
   /* Constant data goes into FLASH */
   .rodata :
   {

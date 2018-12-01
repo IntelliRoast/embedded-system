@@ -32,7 +32,7 @@ uint16_t HE_PID(int16_t i16_bTemp, int16_t i16_tTemp, uint8_t reset) {
 
 	f_PWM = (Kp * f_Error) + (Ki * f_Integral) + (Kd * f_Derivative);
 
-	if (f_PWM > 65536) f_PWM = 65536;
+	if (f_PWM > 1000) f_PWM = 1000;
 	if (f_PWM < 0) f_PWM = 0;
 
 	return (uint16_t) f_PWM;

@@ -28,7 +28,8 @@ enum state {
 	idle,
 	roasting,
 	cooling,
-	ejecting
+	ejecting,
+	manual
 };
 /**
  * @brief Temp Time Pair.
@@ -48,6 +49,8 @@ typedef struct progress_t {
 	int st; // set temp
 	int et; // element temp
 	int dc; // duty cycle percentage
+	int fs; // fan duty cycle
+	int send_update; //control signal between tasks for sending an update to the app
 }progress_t;
 
 
