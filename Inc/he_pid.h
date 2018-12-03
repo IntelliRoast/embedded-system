@@ -13,19 +13,21 @@
 /* Defines used in PID function */
 #define Kp 	8
 #define Ki 	2
-#define Kd  3
+#define Kd  1
+#define Kimin -100
+#define Kimax 100
 
 
 /**
  * @brief PID Function for HE (Heating Element)
- * @param[in] i16_bTemp 	Bean Temperature
- * @param[in] i16_heTemp 	Heating Element Temperature
- * @param[in] i16_tTemp		Target Temperature
+ * @param[in] i_bTemp 	Bean Temperature
+ * @param[in] i_heTemp 	Heating Element Temperature
+ * @param[in] i_tTemp		Target Temperature
  * @param[in] reset			Resets all the internal PID loop values to zero (effectively restarting PID)
  * @retval		0			Cut the Heating element off
  * @retval		non-zero	Cut the Heating element On
  */
-uint16_t HE_PID(int16_t i16_bTemp, int16_t i16_tTemp, uint8_t reset);
+int HE_PID(int i_bTemp, int i_tTemp, int reset);
 
 
 #endif /* HE_PID_H_ */

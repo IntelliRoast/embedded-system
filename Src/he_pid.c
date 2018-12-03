@@ -9,32 +9,41 @@
 
 /**
  * @brief PID Function for HE (Heating Element)
- * @param[in] i16_bTemp 	Bean Temperature
- * @param[in] i16_heTemp 	Heating Element Temperature
- * @param[in] i16_tTemp		Target Temperature
+ * @param[in] i_bTemp 	Bean Temperature
+ * @param[in] i_heTemp 	Heating Element Temperature
+ * @param[in] i_tTemp		Target Temperature
  * @param[in] reset			Resets all the internal PID loop values to zero (effectively restarting PID)
  * @retval		0			Cut the Heating element off
  * @retval		non-zero	Cut the Heating element On
  */
-uint16_t HE_PID(int16_t i16_bTemp, int16_t i16_tTemp, uint8_t reset) {
-	static float f_Error;
-	static float f_lastError;
-	static float f_Integral;
-	static float f_Derivative;
-	float f_PWM;
+int HE_PID(int i_bTemp, int i_tTemp, int reset) {
+	static int i_Error;
+	static int i_lastError;
+	static int i_Integral;
+	static int i_Derivative;
+	int i_PWM;
 
+	if (reset) {
+		i_Error = 0;
+		i_Integral = 0;
+		i_Derivative = 0;
+	}
 	/* Calculate Proportional component */
-	f_Error = i16_tTemp - i16_bTemp;
+	i_Error = i_tTemp - i_bTemp;
 	/* Calculate Integral component */
-	f_Integral += f_Error;
+	i_Integral += i_Error;
 	/* Calculate Derivative component */
-	f_Derivative = f_Error - f_lastError;
+	i_Derivative = i_Error - i_lastError;
 
-	f_PWM = (Kp * f_Error) + (Ki * f_Integral) + (Kd * f_Derivative);
+	if(i_Integral > Kimax) i_Integral = Kimax;
+	if(i_Integral > Kimin) i_Integral = Kimin;
 
-	if (f_PWM > 1000) f_PWM = 1000;
-	if (f_PWM < 0) f_PWM = 0;
+	i_PWM = (Kp * i_Error) + (Ki * i_Integral) + (Kd * i_Derivative);
 
-	return (uint16_t) f_PWM;
+	if (i_PWM > 1000) i_PWM = 1000;
+	if (i_PWM < 0) i_PWM = 0;
+	i_lastError = i_Error;
+
+	return i_PWM;
 }
 
