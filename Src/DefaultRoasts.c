@@ -29,10 +29,10 @@ profile_t MediumRoast[6] = {
 profile_t DarkRoast[6] = {
 		{   0,  25},
 		{  60, 100},
-		{ 300, 180},
+		{ 420, 180},
 		{ 480, 190},
 		{ 540, 200},
-		{ 600, 225}
+		{ 00, 230}
 };
 
 profile_t TestRoast[6] = {

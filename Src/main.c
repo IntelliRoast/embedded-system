@@ -62,7 +62,7 @@
 #include "jsmn.h"
 
 #define ROAST_DC 375 // 30% power
-#define COOLING_DC 250 // 70% power
+#define COOLING_DC 275 // 70% power
 #define EJECT_DC 1000 // full power
 
 #define COLORCHANGE 160
@@ -649,7 +649,7 @@ void StartDefaultTask(void const * argument)
 		char receive_msg[100] = {0};
 		char transmit_msg[100] = {0};
 		osMutexWait(btSerial_mutex,osWaitForever);
-		HAL_UART_Receive(&huart2,(uint8_t *)receive_msg, 100, 0xF00);
+		HAL_UART_Receive(&huart2,(uint8_t *)receive_msg, 100, 0x0F0);
 		osMutexRelease(btSerial_mutex);
 		if (strlen(receive_msg) != 0) {
 			jsmn_parser parser;
@@ -670,14 +670,14 @@ void StartDefaultTask(void const * argument)
 					char str[8] = {0};
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\",\"state\":\"%s\"}\n", state_str(str));
 					osMutexWait(btSerial_mutex,osWaitForever);
-					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xF00);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
 					osMutexRelease(btSerial_mutex);
 				}
 
 				if(jsoneq(receive_msg, &tokens[2], "Load")) {
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
 					osMutexWait(btSerial_mutex,osWaitForever);
-					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xF00);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
 					osMutexRelease(btSerial_mutex);
 
 					osMutexWait(progressMutex,osWaitForever);
@@ -714,18 +714,18 @@ void StartDefaultTask(void const * argument)
 					}
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
 					osMutexWait(btSerial_mutex,osWaitForever);
-					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xF00);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
 					osMutexRelease(btSerial_mutex);
 				}
 
 				if(jsoneq(receive_msg, &tokens[2], "Cool")) {
 					osMutexWait(progressMutex,osWaitForever);
-					if(Progress.State == roasting || Progress.State == manual) Progress.State = cooling;
+					Progress.State = cooling;
 					osMutexRelease(progressMutex);
 
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
 					osMutexWait(btSerial_mutex,osWaitForever);
-					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xF00);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
 					osMutexRelease(btSerial_mutex);
 				}
 				if(jsoneq(receive_msg, &tokens[2], "Stop")) {
@@ -735,7 +735,7 @@ void StartDefaultTask(void const * argument)
 
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
 					osMutexWait(btSerial_mutex,osWaitForever);
-					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xF00);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
 					osMutexRelease(btSerial_mutex);
 				}
 
@@ -746,14 +746,14 @@ void StartDefaultTask(void const * argument)
 
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
 					osMutexWait(btSerial_mutex,osWaitForever);
-					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xF00);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
 					osMutexRelease(btSerial_mutex);
 				}
 
 				if(jsoneq(receive_msg, &tokens[2], "Manual")) {
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
 					osMutexWait(btSerial_mutex,osWaitForever);
-					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xF00);
+					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
 					osMutexRelease(btSerial_mutex);
 
 					osMutexWait(progressMutex,osWaitForever);
@@ -857,7 +857,7 @@ void StartRoastTask(void const * argument)
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 		HAL_Delay(1);
 		HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
-		if (max31855_Error(spi_data)) {
+		/*if (max31855_Error(spi_data)) {
 			if (max31855_Disconnected(spi_data)) {
 				sprintf(temp_msg, "ERROR: Bean Thermocouple Disconnected\n");
 			} else if (max31855_ShortVCC(spi_data)) {
@@ -868,7 +868,7 @@ void StartRoastTask(void const * argument)
 				sprintf(temp_msg, "ERROR: Bean Thermocouple has unknown error\n");
 			}
 			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,	strlen(temp_msg), 0xFFF);
-		}
+		}*/
 		osMutexWait(progressMutex,osWaitForever);
 		Progress.bt = max31855toCelcius(spi_data);
 		osMutexRelease(progressMutex);
@@ -878,7 +878,7 @@ void StartRoastTask(void const * argument)
 		HAL_Delay(1);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 		HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
-		if (max31855_Error(spi_data)) {
+		/*if (max31855_Error(spi_data)) {
 			if (max31855_Disconnected(spi_data)) {
 				sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
 			} else if (max31855_ShortVCC(spi_data)) {
@@ -889,7 +889,7 @@ void StartRoastTask(void const * argument)
 				sprintf(temp_msg, "ERROR: HE Thermocouple has unknown error\n");
 			}
 			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
-		}
+		}*/
 		osMutexWait(progressMutex,osWaitForever);
 		Progress.et = max31855toCelcius(spi_data);
 		osMutexRelease(progressMutex);
@@ -913,7 +913,7 @@ void StartRoastTask(void const * argument)
 		/* Perform Action Based on State */
 		if (Progress.State == roasting) {
 			if(Progress.bt >= COLORCHANGE) {
-				int total_temp_diff = 230 - COLORCHANGE;
+				int total_temp_diff = 235 - COLORCHANGE;
 				fan_offset = ((float) (Progress.bt - COLORCHANGE) / total_temp_diff) * 120;
 			} else {
 				fan_offset = 0;
@@ -933,7 +933,7 @@ void StartRoastTask(void const * argument)
 			}
 			/* Calculate New PWM Duty Cycle */
 			heDutyCycle = HE_PID(Progress.bt, Progress.st, 0);
-			Progress.dc = ((float) heDutyCycle) / 100;
+			Progress.dc = ((float) heDutyCycle) / 10;
 			Progress.fs = ((float) ROAST_DC - fan_offset) / 10;
 			setPWM(htim2, TIM_CHANNEL_1, 1000, heDutyCycle); // set HE DC
 			setPWM(htim3, TIM_CHANNEL_1, 1000, ROAST_DC - fan_offset); // Set Fan DC TODO: Find correct percentage.

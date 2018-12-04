@@ -36,7 +36,7 @@ int HE_PID(int i_bTemp, int i_tTemp, int reset) {
 	i_Derivative = i_Error - i_lastError;
 
 	if(i_Integral > Kimax) i_Integral = Kimax;
-	if(i_Integral > Kimin) i_Integral = Kimin;
+	if(i_Integral < Kimin) i_Integral = Kimin;
 
 	i_PWM = (Kp * i_Error) + (Ki * i_Integral) + (Kd * i_Derivative);
 
