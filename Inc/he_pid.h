@@ -11,9 +11,9 @@
 #include "stdint.h"
 
 /* Defines used in PID function */
-#define Kp 	20
-#define Ki 	8
-#define Kd  0
+#define Kp 	16
+#define Ki 	10
+#define Kd  4
 #define Kimin -100
 #define Kimax 100
 

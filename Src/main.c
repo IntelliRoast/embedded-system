@@ -61,8 +61,8 @@
 #include "DefaultRoasts.h"
 #include "jsmn.h"
 
-#define ROAST_DC 375 // 30% power
-#define COOLING_DC 275 // 70% power
+#define ROAST_DC 400 // 30% power
+#define COOLING_DC 300 // 70% power
 #define EJECT_DC 1000 // full power
 
 #define COLORCHANGE 160
@@ -521,7 +521,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOG_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin|SPI2_CS1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOE, SPI2_CS1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
@@ -536,11 +539,17 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(USER_Btn_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : SPI2_CS0_Pin SPI2_CS1_Pin */
-  GPIO_InitStruct.Pin = SPI2_CS0_Pin|SPI2_CS1_Pin;
+  GPIO_InitStruct.Pin = SPI2_CS0_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+
+  GPIO_InitStruct.Pin = SPI2_CS1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD3_Pin LD2_Pin */
   GPIO_InitStruct.Pin = LD3_Pin|LD2_Pin|LD1_Pin;
@@ -633,8 +642,8 @@ void StartDefaultTask(void const * argument)
 {
 
   /* USER CODE BEGIN 5 */
-	char startup_msg[] = "IntelliRoast initializing\n\n";
-	HAL_UART_Transmit(&huart3, (uint8_t *)startup_msg, strlen(startup_msg), 0xFFF);
+	//char startup_msg[] = "IntelliRoast initializing\n\n";
+	//HAL_UART_Transmit(&huart3, (uint8_t *)startup_msg, strlen(startup_msg), 0xFFF);
 
 
 	osThreadDef(RoastTask, StartRoastTask, osPriorityAboveNormal, 0, 512);
@@ -831,7 +840,6 @@ void StartRoastTask(void const * argument)
 	HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
 
 	uint8_t spi_data[4] = { 0 };
-	float slope;
 	int heDutyCycle;
 	char temp_msg[80] = { 0 };
 	int current_point = 1;
@@ -845,6 +853,7 @@ void StartRoastTask(void const * argument)
 			osMutexWait(progressMutex,osWaitForever);
 			Progress.time = 0;
 			reset_roast = 0;
+			fan_offset = 0;
 			osMutexRelease(progressMutex);
 			heDutyCycle = HE_PID(Progress.bt, 25, 1); // reset parameters on new roast
 		}
@@ -853,10 +862,10 @@ void StartRoastTask(void const * argument)
 
 		/* Collect Bean and Element Temperatures */
 		/* Gather Bean Temp */
-		HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(SPI2_CS0_GPIO_Port, SPI2_CS0_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 		HAL_Delay(1);
-		HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(SPI2_CS0_GPIO_Port, SPI2_CS0_Pin, GPIO_PIN_SET);
 		/*if (max31855_Error(spi_data)) {
 			if (max31855_Disconnected(spi_data)) {
 				sprintf(temp_msg, "ERROR: Bean Thermocouple Disconnected\n");
@@ -874,10 +883,10 @@ void StartRoastTask(void const * argument)
 		osMutexRelease(progressMutex);
 
 		/* Gather Heating Element Temp */
-		HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(SPI2_CS1_GPIO_Port, SPI2_CS1_Pin, GPIO_PIN_RESET);
 		HAL_Delay(1);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-		HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(SPI2_CS1_GPIO_Port, SPI2_CS1_Pin, GPIO_PIN_SET);
 		/*if (max31855_Error(spi_data)) {
 			if (max31855_Disconnected(spi_data)) {
 				sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
@@ -914,29 +923,31 @@ void StartRoastTask(void const * argument)
 		if (Progress.State == roasting) {
 			if(Progress.bt >= COLORCHANGE) {
 				int total_temp_diff = 235 - COLORCHANGE;
-				fan_offset = ((float) (Progress.bt - COLORCHANGE) / total_temp_diff) * 120;
+				fan_offset = ((float) (Progress.bt - COLORCHANGE) / total_temp_diff) * 115;
 			} else {
 				fan_offset = 0;
 			}
 			if (fan_offset < 0) fan_offset = 0;
 
-			/* Calculate Slope */
+			/* Calculate Slope for Heating Element*/
 			int previous_point = current_point - 1;
 			int delta_temp = (*Profile)[current_point].temp - (*Profile)[previous_point].temp;
 			int delta_time = (*Profile)[current_point].time - (*Profile)[previous_point].time;
-			slope = (float) delta_temp / delta_time;
+			float temp_slope = (float) delta_temp / delta_time;
 			int current_time = Progress.time - (*Profile)[previous_point].time;
+			//int current_temp = Progress.temp - (*Profile)[previous_point].temp;
 			if (Progress.time > (*Profile)[5].time){
 				Progress.st = (*Profile)[5].temp;
 			} else {
-				Progress.st = (slope * current_time) + (*Profile)[previous_point].temp;
+				Progress.st = (temp_slope * current_time) + (*Profile)[previous_point].temp;
+				//Progress.fs = ((fan_slope * current_time) + (*Profile)[previous_point].fan) / 10;
 			}
 			/* Calculate New PWM Duty Cycle */
 			heDutyCycle = HE_PID(Progress.bt, Progress.st, 0);
 			Progress.dc = ((float) heDutyCycle) / 10;
 			Progress.fs = ((float) ROAST_DC - fan_offset) / 10;
-			setPWM(htim2, TIM_CHANNEL_1, 1000, heDutyCycle); // set HE DC
-			setPWM(htim3, TIM_CHANNEL_1, 1000, ROAST_DC - fan_offset); // Set Fan DC TODO: Find correct percentage.
+			setPWM(htim2, TIM_CHANNEL_1, 1000, Progress.dc * 10); // set HE DC
+			setPWM(htim3, TIM_CHANNEL_1, 1000, Progress.fs * 10); // Set Fan DC TODO: Find correct percentage.
 
 			/* if Roast temp hits target temp, the Roasting stage is finished. */
 			if ((Progress.bt >= (*Profile)[5].temp) && (Progress.time > (*Profile)[5].time)){ // done roasting when temp hits target temp.
@@ -970,8 +981,8 @@ void StartRoastTask(void const * argument)
 
 		if (Progress.State == ejecting) {
 			setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // Cut off heater
-			setPWM(htim3, TIM_CHANNEL_1, 1000, EJECT_DC); // Set fan DC.
-			if (ejection_time >= 20){ //ejection finished
+			setPWM(htim3, TIM_CHANNEL_1, 1000, COOLING_DC); // Set fan DC.
+			if (ejection_time >= 5){ //ejection finished
 				/* cut off heater and fan */
 				setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // cut off heater
 				setPWM(htim3, TIM_CHANNEL_1, 1024, 0); // cut off fan.
