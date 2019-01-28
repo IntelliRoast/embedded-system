@@ -10,7 +10,7 @@
   * inserted by the user or by software development tools
   * are owned by their respective copyright owners.
   *
-  * Copyright (c) 2018 STMicroelectronics International N.V. 
+  * Copyright (c) 2019 STMicroelectronics International N.V. 
   * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without 
@@ -80,16 +80,14 @@ TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
-DMA_HandleTypeDef hdma_usart2_rx;
-DMA_HandleTypeDef hdma_usart2_tx;
 
 osThreadId defaultTaskHandle;
 osThreadId RoastTaskHandle;
 osThreadId commTaskHandle;
 osMessageQId transmittQueueHandle;
 osMessageQId recieveQueueHandle;
-osMutexId wireSerial_mutex;
-osMutexId btSerial_mutex;
+osMutexId wireSerial_mutexHandle;
+osMutexId btSerial_mutexHandle;
 
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
@@ -103,18 +101,21 @@ static int reset_roast;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
-static void MX_USART3_UART_Init(void);
 static void MX_TIM3_Init(void);
-static void MX_TIM2_Init(void);
 static void MX_SPI1_Init(void);
 static void MX_TIM4_Init(void);
 static void MX_USART2_UART_Init(void);
+static void MX_USART3_UART_Init(void);
 static void MX_RTC_Init(void);
+static void MX_TIM2_Init(void);
 void StartDefaultTask(void const * argument);
 void StartRoastTask(void const * argument);
 void StartCommTask(void const * argument);
 
 void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
+                                
+                                
+                                
 
 /* USER CODE BEGIN PFP */
 /* Private function prototypes -----------------------------------------------*/
@@ -125,21 +126,22 @@ void HAL_TIM_MspPostInit(TIM_HandleTypeDef *htim);
 /* USER CODE END 0 */
 
 /**
- * @brief  The application entry point.
- *
- * @retval None
- */
-int main(void) {
-	/* USER CODE BEGIN 1 */
+  * @brief  The application entry point.
+  *
+  * @retval None
+  */
+int main(void)
+{
+  /* USER CODE BEGIN 1 */
 
-	/* USER CODE END 1 */
+  /* USER CODE END 1 */
 
-	/* MCU Configuration----------------------------------------------------------*/
+  /* MCU Configuration----------------------------------------------------------*/
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* USER CODE BEGIN Init */
+  /* USER CODE BEGIN Init */
 	Progress.State = idle;
 	Progress.time = 0;
 	Progress.bt = 0;
@@ -150,93 +152,98 @@ int main(void) {
 	Progress.send_update = 0;
 	Profile = &MediumRoast;
 
-	/* USER CODE END Init */
+  /* USER CODE END Init */
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* USER CODE BEGIN SysInit */
+  /* USER CODE BEGIN SysInit */
 
-	/* USER CODE END SysInit */
+  /* USER CODE END SysInit */
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_TIM3_Init();
-	MX_TIM2_Init();
-	MX_SPI1_Init();
-	MX_TIM4_Init();
-	MX_USART2_UART_Init();
-	MX_USART3_UART_Init();
-	MX_RTC_Init();
-	/* USER CODE BEGIN 2 */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_TIM3_Init();
+  MX_SPI1_Init();
+  MX_TIM4_Init();
+  MX_USART2_UART_Init();
+  MX_USART3_UART_Init();
+  MX_RTC_Init();
+  MX_TIM2_Init();
+  /* USER CODE BEGIN 2 */
 
-	/* USER CODE END 2 */
+  /* USER CODE END 2 */
 
-	/* Create the mutex(es) */
-	/* definition and creation of wireSerial_mutex */
-	osMutexDef(wireSerial_mutex);
-	wireSerial_mutex = osMutexCreate(osMutex(wireSerial_mutex));
+  /* Create the mutex(es) */
+  /* definition and creation of wireSerial_mutex */
+  osMutexDef(wireSerial_mutex);
+  wireSerial_mutexHandle = osMutexCreate(osMutex(wireSerial_mutex));
 
-	/* definition and creation of btSerial_mutex */
-	osMutexDef(btSerial_mutex);
-	btSerial_mutex = osMutexCreate(osMutex(btSerial_mutex));
+  /* definition and creation of btSerial_mutex */
+  osMutexDef(btSerial_mutex);
+  btSerial_mutexHandle = osMutexCreate(osMutex(btSerial_mutex));
 
-	/* USER CODE BEGIN RTOS_MUTEX */
-	osMutexDef(progressMutex);
-	progressMutex = osMutexCreate(osMutex(progressMutex));
-	/* USER CODE END RTOS_MUTEX */
+  /* USER CODE BEGIN RTOS_MUTEX */
+  osMutexDef(progressMutex);
+  progressMutex = osMutexCreate(osMutex(progressMutex));
+  /* USER CODE END RTOS_MUTEX */
 
-	/* USER CODE BEGIN RTOS_SEMAPHORES */
+  /* USER CODE BEGIN RTOS_SEMAPHORES */
 	/* add semaphores, ... */
-	/* USER CODE END RTOS_SEMAPHORES */
+  /* USER CODE END RTOS_SEMAPHORES */
 
-	/* USER CODE BEGIN RTOS_TIMERS */
+  /* USER CODE BEGIN RTOS_TIMERS */
 	/* start timers, add new ones, ... */
-	/* USER CODE END RTOS_TIMERS */
+  /* USER CODE END RTOS_TIMERS */
 
-	/* Create the thread(s) */
-	/* definition and creation of defaultTask */
-	osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 2048);
-	defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
+  /* Create the thread(s) */
+  /* definition and creation of defaultTask */
+  osThreadDef(defaultTask, StartDefaultTask, osPriorityNormal, 0, 2048);
+  defaultTaskHandle = osThreadCreate(osThread(defaultTask), NULL);
 
+  ///* definition and creation of RoastTask */
+  //osThreadDef(RoastTask, StartRoastTask, osPriorityAboveNormal, 0, 512);
+  //RoastTaskHandle = osThreadCreate(osThread(RoastTask), NULL);
 
+  ///* definition and creation of commTask */
+  //osThreadDef(commTask, StartCommTask, osPriorityBelowNormal, 0, 512);
+  //commTaskHandle = osThreadCreate(osThread(commTask), NULL);
 
-	/* definition and creation of commTask */
-
-	/* USER CODE BEGIN RTOS_THREADS */
+  /* USER CODE BEGIN RTOS_THREADS */
 	/* add threads, ... */
-	/* USER CODE END RTOS_THREADS */
+  /* USER CODE END RTOS_THREADS */
 
-	/* Create the queue(s)
-	 definition and creation of transmittQueue
-	 what about the sizeof here??? cd native code
-	osMessageQDef(transmittQueue, 16, struct progress);
-	transmittQueueHandle = osMessageCreate(osMessageQ(transmittQueue), NULL);
+  /* Create the queue(s) */
+  /* definition and creation of transmittQueue */
+/* what about the sizeof here??? cd native code */
+  //osMessageQDef(transmittQueue, 16, struct progress);
+  //transmittQueueHandle = osMessageCreate(osMessageQ(transmittQueue), NULL);
 
-	 definition and creation of recieveQueue
-	 what about the sizeof here??? cd native code
-	osMessageQDef(recieveQueue, 16, struct profile);
-	recieveQueueHandle = osMessageCreate(osMessageQ(recieveQueue), NULL);
-*/
-	/* USER CODE BEGIN RTOS_QUEUES */
+  /* definition and creation of recieveQueue */
+/* what about the sizeof here??? cd native code */
+  //osMessageQDef(recieveQueue, 16, struct profile);
+  //recieveQueueHandle = osMessageCreate(osMessageQ(recieveQueue), NULL);
+
+  /* USER CODE BEGIN RTOS_QUEUES */
 	/* add queues, ... */
-	/* USER CODE END RTOS_QUEUES */
+  /* USER CODE END RTOS_QUEUES */
+ 
 
-	/* Start scheduler */
-	osKernelStart();
+  /* Start scheduler */
+  osKernelStart();
+  
+  /* We should never get here as control is now taken by the scheduler */
 
-	/* We should never get here as control is now taken by the scheduler */
-
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
 	while (1) {
 
-		/* USER CODE END WHILE */
+  /* USER CODE END WHILE */
 
-		/* USER CODE BEGIN 3 */
+  /* USER CODE BEGIN 3 */
 
 	}
-	/* USER CODE END 3 */
+  /* USER CODE END 3 */
 
 }
 
@@ -333,131 +340,140 @@ static void MX_RTC_Init(void)
 }
 
 /* SPI1 init function */
-static void MX_SPI1_Init(void) {
+static void MX_SPI1_Init(void)
+{
 
-	/* SPI1 parameter configuration*/
-	hspi1.Instance = SPI1;
-	hspi1.Init.Mode = SPI_MODE_MASTER;
-	hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-	hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-	hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-	hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-	hspi1.Init.NSS = SPI_NSS_SOFT;
-	hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
-	hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-	hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-	hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-	hspi1.Init.CRCPolynomial = 10;
-	if (HAL_SPI_Init(&hspi1) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  /* SPI1 parameter configuration*/
+  hspi1.Instance = SPI1;
+  hspi1.Init.Mode = SPI_MODE_MASTER;
+  hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi1.Init.NSS = SPI_NSS_SOFT;
+  hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi1.Init.CRCPolynomial = 10;
+  if (HAL_SPI_Init(&hspi1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
 }
 
 /* TIM2 init function */
-static void MX_TIM2_Init(void) {
+static void MX_TIM2_Init(void)
+{
 
-	TIM_MasterConfigTypeDef sMasterConfig;
-	TIM_OC_InitTypeDef sConfigOC;
+  TIM_MasterConfigTypeDef sMasterConfig;
+  TIM_OC_InitTypeDef sConfigOC;
 
-	htim2.Instance = TIM2;
-	htim2.Init.Prescaler = 60000;
-	htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim2.Init.Period = 1000;
-	htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	if (HAL_TIM_PWM_Init(&htim2) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  htim2.Instance = TIM2;
+  htim2.Init.Prescaler = 60000;
+  htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim2.Init.Period = 1000;
+  htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim2) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig)
-			!= HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
-	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
-	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
-	HAL_TIM_MspPostInit(&htim2);
+  HAL_TIM_MspPostInit(&htim2);
 
 }
 
 /* TIM3 init function */
-static void MX_TIM3_Init(void) {
-	TIM_MasterConfigTypeDef sMasterConfig;
-	TIM_OC_InitTypeDef sConfigOC;
+static void MX_TIM3_Init(void)
+{
 
-	htim3.Instance = TIM3;
-	htim3.Init.Prescaler = 0;
-	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim3.Init.Period = 1000;
-	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	if (HAL_TIM_PWM_Init(&htim3) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  TIM_MasterConfigTypeDef sMasterConfig;
+  TIM_OC_InitTypeDef sConfigOC;
 
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig)
-			!= HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 0;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 1000;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim3) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
-	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
-	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
-	HAL_TIM_MspPostInit(&htim3);
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
+
+  HAL_TIM_MspPostInit(&htim3);
 
 }
 
 /* TIM4 init function */
-static void MX_TIM4_Init(void) {
+static void MX_TIM4_Init(void)
+{
 
-	TIM_MasterConfigTypeDef sMasterConfig;
-	TIM_OC_InitTypeDef sConfigOC;
+  TIM_MasterConfigTypeDef sMasterConfig;
+  TIM_OC_InitTypeDef sConfigOC;
 
-	htim4.Instance = TIM4;
-	htim4.Init.Prescaler = 0;
-	htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim4.Init.Period = 2048;
-	htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	if (HAL_TIM_PWM_Init(&htim4) != HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  htim4.Instance = TIM4;
+  htim4.Init.Prescaler = 0;
+  htim4.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim4.Init.Period = 2048;
+  htim4.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim4.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_PWM_Init(&htim4) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig)
-			!= HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim4, &sMasterConfig) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
-	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
-	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
-		_Error_Handler(__FILE__, __LINE__);
-	}
+  sConfigOC.OCMode = TIM_OCMODE_PWM1;
+  sConfigOC.Pulse = 0;
+  sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
+  sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
+  if (HAL_TIM_PWM_ConfigChannel(&htim4, &sConfigOC, TIM_CHANNEL_1) != HAL_OK)
+  {
+    _Error_Handler(__FILE__, __LINE__);
+  }
 
-	HAL_TIM_MspPostInit(&htim4);
+  HAL_TIM_MspPostInit(&htim4);
 
 }
 
@@ -516,15 +532,16 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin|SPI2_CS2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOE, SPI2_CS1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(SPI2_CS1_GPIO_Port, SPI2_CS1_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
@@ -538,21 +555,22 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(USER_Btn_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SPI2_CS0_Pin SPI2_CS1_Pin */
-  GPIO_InitStruct.Pin = SPI2_CS0_Pin;
+  /*Configure GPIO pins : SPI2_CS0_Pin SPI2_CS2_Pin */
+  GPIO_InitStruct.Pin = SPI2_CS0_Pin|SPI2_CS2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
+  /*Configure GPIO pin : SPI2_CS1_Pin */
   GPIO_InitStruct.Pin = SPI2_CS1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
+  HAL_GPIO_Init(SPI2_CS1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD3_Pin LD2_Pin */
-  GPIO_InitStruct.Pin = LD3_Pin|LD2_Pin|LD1_Pin;
+  GPIO_InitStruct.Pin = LD3_Pin|LD2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -657,9 +675,9 @@ void StartDefaultTask(void const * argument)
 		HAL_GPIO_TogglePin(LD3_GPIO_Port, LD3_Pin);
 		char receive_msg[100] = {0};
 		char transmit_msg[100] = {0};
-		osMutexWait(btSerial_mutex,osWaitForever);
+		osMutexWait(btSerial_mutexHandle,osWaitForever);
 		HAL_UART_Receive(&huart2,(uint8_t *)receive_msg, 100, 0x0F0);
-		osMutexRelease(btSerial_mutex);
+		osMutexRelease(btSerial_mutexHandle);
 		if (strlen(receive_msg) != 0) {
 			jsmn_parser parser;
 			jsmntok_t tokens[100];
@@ -678,16 +696,16 @@ void StartDefaultTask(void const * argument)
 					HAL_GPIO_WritePin(LD2_GPIO_Port, LD2_Pin, GPIO_PIN_SET);
 					char str[8] = {0};
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\",\"state\":\"%s\"}\n", state_str(str));
-					osMutexWait(btSerial_mutex,osWaitForever);
+					osMutexWait(btSerial_mutexHandle,osWaitForever);
 					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-					osMutexRelease(btSerial_mutex);
+					osMutexRelease(btSerial_mutexHandle);
 				}
 
 				if(jsoneq(receive_msg, &tokens[2], "Load")) {
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
-					osMutexWait(btSerial_mutex,osWaitForever);
+					osMutexWait(btSerial_mutexHandle,osWaitForever);
 					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-					osMutexRelease(btSerial_mutex);
+					osMutexRelease(btSerial_mutexHandle);
 
 					osMutexWait(progressMutex,osWaitForever);
 					if(Progress.State != roasting) {
@@ -722,9 +740,9 @@ void StartDefaultTask(void const * argument)
 						osMutexRelease(progressMutex);
 					}
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
-					osMutexWait(btSerial_mutex,osWaitForever);
+					osMutexWait(btSerial_mutexHandle,osWaitForever);
 					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-					osMutexRelease(btSerial_mutex);
+					osMutexRelease(btSerial_mutexHandle);
 				}
 
 				if(jsoneq(receive_msg, &tokens[2], "Cool")) {
@@ -733,9 +751,9 @@ void StartDefaultTask(void const * argument)
 					osMutexRelease(progressMutex);
 
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
-					osMutexWait(btSerial_mutex,osWaitForever);
+					osMutexWait(btSerial_mutexHandle,osWaitForever);
 					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-					osMutexRelease(btSerial_mutex);
+					osMutexRelease(btSerial_mutexHandle);
 				}
 				if(jsoneq(receive_msg, &tokens[2], "Stop")) {
 					osMutexWait(progressMutex,osWaitForever);
@@ -743,9 +761,9 @@ void StartDefaultTask(void const * argument)
 					osMutexRelease(progressMutex);
 
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
-					osMutexWait(btSerial_mutex,osWaitForever);
+					osMutexWait(btSerial_mutexHandle,osWaitForever);
 					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-					osMutexRelease(btSerial_mutex);
+					osMutexRelease(btSerial_mutexHandle);
 				}
 
 				if(jsoneq(receive_msg, &tokens[2], "Eject")) {
@@ -754,16 +772,16 @@ void StartDefaultTask(void const * argument)
 					osMutexRelease(progressMutex);
 
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
-					osMutexWait(btSerial_mutex,osWaitForever);
+					osMutexWait(btSerial_mutexHandle,osWaitForever);
 					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-					osMutexRelease(btSerial_mutex);
+					osMutexRelease(btSerial_mutexHandle);
 				}
 
 				if(jsoneq(receive_msg, &tokens[2], "Manual")) {
 					sprintf(transmit_msg, "{\"cmd\":\"Ack\"}\n");
-					osMutexWait(btSerial_mutex,osWaitForever);
+					osMutexWait(btSerial_mutexHandle,osWaitForever);
 					HAL_UART_Transmit(&huart2, (uint8_t *)transmit_msg,strlen(transmit_msg),0xFFF);
-					osMutexRelease(btSerial_mutex);
+					osMutexRelease(btSerial_mutexHandle);
 
 					osMutexWait(progressMutex,osWaitForever);
 					Progress.State = manual;
@@ -806,9 +824,9 @@ void StartDefaultTask(void const * argument)
 					Progress.dc,
 					Progress.fs);
 			//Send Bluetooth
-			osMutexWait(btSerial_mutex,osWaitForever);
+			osMutexWait(btSerial_mutexHandle,osWaitForever);
 			HAL_UART_Transmit(&huart2, (uint8_t *) bluetooth_msg, strlen(bluetooth_msg),0xFFF);
-			osMutexRelease(btSerial_mutex);
+			osMutexRelease(btSerial_mutexHandle);
 			//Serial Message
 			sprintf(serial_msg, "%s,%d,%d,%d,%d,%d,%d\n",
 					state_string,
@@ -819,9 +837,9 @@ void StartDefaultTask(void const * argument)
 					Progress.dc,
 					Progress.fs);
 			//Send Serial
-			osMutexWait(wireSerial_mutex,osWaitForever);
+			osMutexWait(wireSerial_mutexHandle,osWaitForever);
 			HAL_UART_Transmit(&huart3, (uint8_t*) serial_msg, strlen(serial_msg), 0xFFF); //Serial Port
-			osMutexRelease(wireSerial_mutex);
+			osMutexRelease(wireSerial_mutexHandle);
 
 		}
 		osMutexRelease(progressMutex);
@@ -836,8 +854,9 @@ void StartRoastTask(void const * argument)
   /* USER CODE BEGIN StartRoastTask */
 
 	HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(SPI2_CS0_GPIO_Port, SPI2_CS0_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(SPI2_CS1_GPIO_Port, SPI2_CS1_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(SPI2_CS2_GPIO_Port, SPI2_CS2_Pin, GPIO_PIN_SET);
 
 	uint8_t spi_data[4] = { 0 };
 	int heDutyCycle;
@@ -883,10 +902,10 @@ void StartRoastTask(void const * argument)
 		osMutexRelease(progressMutex);
 
 		/* Gather Heating Element Temp */
-		HAL_GPIO_WritePin(SPI2_CS1_GPIO_Port, SPI2_CS1_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(SPI2_CS2_GPIO_Port, SPI2_CS1_Pin, GPIO_PIN_RESET);
 		HAL_Delay(1);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-		HAL_GPIO_WritePin(SPI2_CS1_GPIO_Port, SPI2_CS1_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(SPI2_CS2_GPIO_Port, SPI2_CS1_Pin, GPIO_PIN_SET);
 		/*if (max31855_Error(spi_data)) {
 			if (max31855_Disconnected(spi_data)) {
 				sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
@@ -902,6 +921,27 @@ void StartRoastTask(void const * argument)
 		osMutexWait(progressMutex,osWaitForever);
 		Progress.et = max31855toCelcius(spi_data);
 		osMutexRelease(progressMutex);
+
+/*		 Gather Heating Element Temp
+		HAL_GPIO_WritePin(SPI2_CS1_GPIO_Port, SPI2_CS2_Pin, GPIO_PIN_RESET);
+		HAL_Delay(1);
+		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
+		HAL_GPIO_WritePin(SPI2_CS1_GPIO_Port, SPI2_CS2_Pin, GPIO_PIN_SET);
+		if (max31855_Error(spi_data)) {
+					if (max31855_Disconnected(spi_data)) {
+						sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
+					} else if (max31855_ShortVCC(spi_data)) {
+						sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to VCC\n");
+					} else if (max31855_ShortGND(spi_data)) {
+						sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to GND\n");
+					} else {
+						sprintf(temp_msg, "ERROR: HE Thermocouple has unknown error\n");
+					}
+					HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
+				}
+		osMutexWait(progressMutex,osWaitForever);
+		Progress.it = max31855toCelcius(spi_data);
+		osMutexRelease(progressMutex);*/
 
 		if (Progress.State == idle){
 			setPWM(htim2, TIM_CHANNEL_1, 1000, 0);
@@ -992,9 +1032,9 @@ void StartRoastTask(void const * argument)
 				Progress.fs = 100;
 				osMutexRelease(progressMutex);
 				sprintf(temp_msg, "ROAST_FINISHED\n");
-				osMutexWait(wireSerial_mutex,osWaitForever);
+				osMutexWait(wireSerial_mutexHandle,osWaitForever);
 				HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
-				osMutexRelease(wireSerial_mutex);
+				osMutexRelease(wireSerial_mutexHandle);
 			} else {
 				ejection_time++;
 			}

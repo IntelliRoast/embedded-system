@@ -10,7 +10,7 @@
   * inserted by the user or by software development tools
   * are owned by their respective copyright owners.
   *
-  * Copyright (c) 2018 STMicroelectronics International N.V. 
+  * Copyright (c) 2019 STMicroelectronics International N.V. 
   * All rights reserved.
   *
   * Redistribution and use in source and binary forms, with or without 
@@ -69,8 +69,10 @@
 #define BT_RX_GPIO_Port GPIOA
 #define SPI2_CS0_Pin GPIO_PIN_13
 #define SPI2_CS0_GPIO_Port GPIOF
-#define SPI2_CS1_Pin GPIO_PIN_14
-#define SPI2_CS1_GPIO_Port GPIOF
+#define SPI2_CS2_Pin GPIO_PIN_14
+#define SPI2_CS2_GPIO_Port GPIOF
+#define SPI2_CS1_Pin GPIO_PIN_9
+#define SPI2_CS1_GPIO_Port GPIOE
 #define LD3_Pin GPIO_PIN_14
 #define LD3_GPIO_Port GPIOB
 #define STLK_RX_Pin GPIO_PIN_8

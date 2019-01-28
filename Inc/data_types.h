@@ -47,7 +47,7 @@ typedef struct progress_t {
 	int time;
 	int bt; // bean temp
 	int st; // set temp
-	int et; // element temp
+	int et; // exhaust temp
 	int dc; // duty cycle percentage
 	int fs; // fan duty cycle
 	int send_update; //control signal between tasks for sending an update to the app
