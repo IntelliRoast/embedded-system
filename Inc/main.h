@@ -67,10 +67,12 @@
 #define MCO_GPIO_Port GPIOH
 #define BT_RX_Pin GPIO_PIN_3
 #define BT_RX_GPIO_Port GPIOA
-#define SPI2_CS0_Pin GPIO_PIN_13
-#define SPI2_CS0_GPIO_Port GPIOF
-#define SPI2_CS1_Pin GPIO_PIN_14
-#define SPI2_CS1_GPIO_Port GPIOF
+#define SPI1_CS0_Pin GPIO_PIN_13
+#define SPI1_CS0_GPIO_Port GPIOF
+#define SPI1_CS1_Pin GPIO_PIN_14
+#define SPI1_CS1_GPIO_Port GPIOF
+#define SPI1_CS2_Pin GPIO_PIN_9
+#define SPI1_CS2_GPIO_Port GPIOE
 #define LD3_Pin GPIO_PIN_14
 #define LD3_GPIO_Port GPIOB
 #define STLK_RX_Pin GPIO_PIN_8

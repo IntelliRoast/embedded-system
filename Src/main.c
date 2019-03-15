@@ -61,9 +61,10 @@
 #include "DefaultRoasts.h"
 #include "jsmn.h"
 
-#define ROAST_DC 375 // 30% power
-#define COOLING_DC 275 // 70% power
+#define ROAST_DC 400 // 30% power
+#define COOLING_DC 340 // 34% power
 #define EJECT_DC 1000 // full power
+#define COOLDOWN_TEMP 40 // temperature at which the cooldown stage ends.
 
 #define COLORCHANGE 160
 
@@ -516,12 +517,14 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOH_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOF_CLK_ENABLE();
+  __HAL_RCC_GPIOE_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOG_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin|SPI2_CS1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin|SPI1_CS1_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOE, SPI1_CS2_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
@@ -535,12 +538,19 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(USER_Btn_GPIO_Port, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SPI2_CS0_Pin SPI2_CS1_Pin */
-  GPIO_InitStruct.Pin = SPI2_CS0_Pin|SPI2_CS1_Pin;
+  /*Configure GPIO pins : SPI1_CS0_Pin SPI1_CS1_Pin */
+  GPIO_InitStruct.Pin = SPI1_CS0_Pin|SPI1_CS1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : SPI1_CS2_Pin */
+  GPIO_InitStruct.Pin = SPI1_CS2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
   /*Configure GPIO pins : LD3_Pin LD2_Pin */
   GPIO_InitStruct.Pin = LD3_Pin|LD2_Pin|LD1_Pin;
@@ -633,8 +643,8 @@ void StartDefaultTask(void const * argument)
 {
 
   /* USER CODE BEGIN 5 */
-	char startup_msg[] = "IntelliRoast initializing\n\n";
-	HAL_UART_Transmit(&huart3, (uint8_t *)startup_msg, strlen(startup_msg), 0xFFF);
+//	char startup_msg[] = "IntelliRoast initializing\n\n";
+//	HAL_UART_Transmit(&huart3, (uint8_t *)startup_msg, strlen(startup_msg), 0xFFF);
 
 
 	osThreadDef(RoastTask, StartRoastTask, osPriorityAboveNormal, 0, 512);
@@ -683,7 +693,14 @@ void StartDefaultTask(void const * argument)
 					osMutexWait(progressMutex,osWaitForever);
 					if(Progress.State != roasting) {
 						if(jsoneq(receive_msg, &tokens[3], "custom")) {
-							//TODO: Handle Custom Roast Loading
+							for (int i=0; i < tokens[6].size; i++) {
+								CustomRoast[i].time = atoi(&receive_msg[tokens[6+1+i].start]);
+							}
+							for (int i=0; i < tokens[14].size; i++) {
+								CustomRoast[i].temp = atoi(&receive_msg[tokens[14+1+i].start]);
+							}
+							Profile = &CustomRoast;
+
 						} else { //Default Roast
 							int roast = strtol(receive_msg + tokens[4].start, NULL, 10);
 							switch (roast){
@@ -703,6 +720,7 @@ void StartDefaultTask(void const * argument)
 						}
 					}
 					osMutexRelease(progressMutex);
+
 				}
 
 				if(jsoneq(receive_msg, &tokens[2], "Start")){
@@ -788,12 +806,13 @@ void StartDefaultTask(void const * argument)
 			state_str(state_string);
 
 			//Bluetooth Message
-			sprintf(bluetooth_msg, "{\"state\":\"%s\",\"T\":%d,\"BT\":%d,\"ST\":%d,\"ET\":%d,\"DC\":%d,\"FS\":%d}\n",
+			sprintf(bluetooth_msg, "{\"state\":\"%s\",\"T\":%d,\"BT\":%d,\"ST\":%d,\"ET\":%d,\"IT\":%d,\"DC\":%d,\"FS\":%d}\n",
 					state_string,
 					Progress.time,
 					Progress.bt,
 					Progress.st,
 					Progress.et,
+					Progress.it,
 					Progress.dc,
 					Progress.fs);
 			//Send Bluetooth
@@ -801,11 +820,12 @@ void StartDefaultTask(void const * argument)
 			HAL_UART_Transmit(&huart2, (uint8_t *) bluetooth_msg, strlen(bluetooth_msg),0xFFF);
 			osMutexRelease(btSerial_mutex);
 			//Serial Message
-			sprintf(serial_msg, "%s,%d,%d,%d,%d,%d,%d\n",
+			sprintf(serial_msg, "%s,%d,%d,%d,%d,%d,%d,%d\n",
 					state_string,
 					Progress.time,
-					Progress.bt,
 					Progress.st,
+					Progress.it,
+					Progress.bt,
 					Progress.et,
 					Progress.dc,
 					Progress.fs);
@@ -827,11 +847,10 @@ void StartRoastTask(void const * argument)
   /* USER CODE BEGIN StartRoastTask */
 
 	HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_SET);
 
 	uint8_t spi_data[4] = { 0 };
-	float slope;
 	int heDutyCycle;
 	char temp_msg[80] = { 0 };
 	int current_point = 1;
@@ -845,6 +864,7 @@ void StartRoastTask(void const * argument)
 			osMutexWait(progressMutex,osWaitForever);
 			Progress.time = 0;
 			reset_roast = 0;
+			fan_offset = 0;
 			osMutexRelease(progressMutex);
 			heDutyCycle = HE_PID(Progress.bt, 25, 1); // reset parameters on new roast
 		}
@@ -853,10 +873,10 @@ void StartRoastTask(void const * argument)
 
 		/* Collect Bean and Element Temperatures */
 		/* Gather Bean Temp */
-		HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 		HAL_Delay(1);
-		HAL_GPIO_WritePin(GPIOF, SPI2_CS0_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_SET);
 		/*if (max31855_Error(spi_data)) {
 			if (max31855_Disconnected(spi_data)) {
 				sprintf(temp_msg, "ERROR: Bean Thermocouple Disconnected\n");
@@ -874,10 +894,10 @@ void StartRoastTask(void const * argument)
 		osMutexRelease(progressMutex);
 
 		/* Gather Heating Element Temp */
-		HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_RESET);
+		HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_RESET);
 		HAL_Delay(1);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-		HAL_GPIO_WritePin(GPIOF, SPI2_CS1_Pin, GPIO_PIN_SET);
+		HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_SET);
 		/*if (max31855_Error(spi_data)) {
 			if (max31855_Disconnected(spi_data)) {
 				sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
@@ -892,6 +912,26 @@ void StartRoastTask(void const * argument)
 		}*/
 		osMutexWait(progressMutex,osWaitForever);
 		Progress.et = max31855toCelcius(spi_data);
+		osMutexRelease(progressMutex);
+
+		HAL_GPIO_WritePin(GPIOE, SPI1_CS2_Pin, GPIO_PIN_RESET);
+		HAL_Delay(1);
+		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
+		HAL_GPIO_WritePin(GPIOE, SPI1_CS2_Pin, GPIO_PIN_SET);
+		/*if (max31855_Error(spi_data)) {
+					if (max31855_Disconnected(spi_data)) {
+						sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
+					} else if (max31855_ShortVCC(spi_data)) {
+						sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to VCC\n");
+					} else if (max31855_ShortGND(spi_data)) {
+						sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to GND\n");
+					} else {
+						sprintf(temp_msg, "ERROR: HE Thermocouple has unknown error\n");
+					}
+					HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
+				}*/
+		osMutexWait(progressMutex,osWaitForever);
+		Progress.it = max31855toCelcius(spi_data);
 		osMutexRelease(progressMutex);
 
 		if (Progress.State == idle){
@@ -914,7 +954,7 @@ void StartRoastTask(void const * argument)
 		if (Progress.State == roasting) {
 			if(Progress.bt >= COLORCHANGE) {
 				int total_temp_diff = 235 - COLORCHANGE;
-				fan_offset = ((float) (Progress.bt - COLORCHANGE) / total_temp_diff) * 120;
+				fan_offset = ((float) (Progress.bt - COLORCHANGE) / total_temp_diff) * 105;
 			} else {
 				fan_offset = 0;
 			}
@@ -924,19 +964,19 @@ void StartRoastTask(void const * argument)
 			int previous_point = current_point - 1;
 			int delta_temp = (*Profile)[current_point].temp - (*Profile)[previous_point].temp;
 			int delta_time = (*Profile)[current_point].time - (*Profile)[previous_point].time;
-			slope = (float) delta_temp / delta_time;
+			float temp_slope = (float) delta_temp / delta_time;
 			int current_time = Progress.time - (*Profile)[previous_point].time;
 			if (Progress.time > (*Profile)[5].time){
 				Progress.st = (*Profile)[5].temp;
 			} else {
-				Progress.st = (slope * current_time) + (*Profile)[previous_point].temp;
+				Progress.st = (temp_slope * current_time) + (*Profile)[previous_point].temp;
 			}
 			/* Calculate New PWM Duty Cycle */
 			heDutyCycle = HE_PID(Progress.bt, Progress.st, 0);
 			Progress.dc = ((float) heDutyCycle) / 10;
 			Progress.fs = ((float) ROAST_DC - fan_offset) / 10;
-			setPWM(htim2, TIM_CHANNEL_1, 1000, heDutyCycle); // set HE DC
-			setPWM(htim3, TIM_CHANNEL_1, 1000, ROAST_DC - fan_offset); // Set Fan DC TODO: Find correct percentage.
+			setPWM(htim2, TIM_CHANNEL_1, 1000, Progress.dc * 10); // set HE DC
+			setPWM(htim3, TIM_CHANNEL_1, 1000, Progress.fs * 10); // Set Fan DC TODO: Find correct percentage.
 
 			/* if Roast temp hits target temp, the Roasting stage is finished. */
 			if ((Progress.bt >= (*Profile)[5].temp) && (Progress.time > (*Profile)[5].time)){ // done roasting when temp hits target temp.
@@ -960,18 +1000,18 @@ void StartRoastTask(void const * argument)
 			setPWM(htim3, TIM_CHANNEL_1, 1000, COOLING_DC); // Set fan DC TODO: Find correct percentage.
 
 			osMutexWait(progressMutex,osWaitForever);
-			Progress.st = 30;
+			Progress.st = COOLDOWN_TEMP;
 			Progress.dc = 0;
 			Progress.fs = COOLING_DC / 10;
 			ejection_time = 0;
-			if((Progress.bt < 30) && (Progress.et < 45)) Progress.State = idle;
+			if(Progress.bt < COOLDOWN_TEMP) Progress.State = idle;
 			osMutexRelease(progressMutex);
 		}
 
 		if (Progress.State == ejecting) {
 			setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // Cut off heater
 			setPWM(htim3, TIM_CHANNEL_1, 1000, EJECT_DC); // Set fan DC.
-			if (ejection_time >= 20){ //ejection finished
+			if (ejection_time >= 5){ //ejection finished
 				/* cut off heater and fan */
 				setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // cut off heater
 				setPWM(htim3, TIM_CHANNEL_1, 1024, 0); // cut off fan.

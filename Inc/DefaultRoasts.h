@@ -21,8 +21,10 @@ extern struct profile DarkRoast[ROASTLEN];
 
 extern struct profile TestRoast[ROASTLEN];
 
+extern struct profile CustomRoast[ROASTLEN];
+
 // Refer to https://stackoverflow.com/a/28505272 for details on why this is.
-__attribute__((__section__(".roast_data"))) extern const profile_t customRoast[6];
+//__attribute__((__section__(".roast_data"))) extern const profile_t customRoast[6];
 
 
 

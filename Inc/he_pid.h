@@ -11,11 +11,11 @@
 #include "stdint.h"
 
 /* Defines used in PID function */
-#define Kp 	20
-#define Ki 	8
-#define Kd  0
-#define Kimin -100
-#define Kimax 100
+#define Kp 	28
+#define Ki 	3
+#define Kd  3
+#define Kimin -300
+#define Kimax 300
 
 
 /**
