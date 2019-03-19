@@ -61,10 +61,11 @@
 #include "DefaultRoasts.h"
 #include "jsmn.h"
 
-#define ROAST_DC 400 // 30% power
-#define COOLING_DC 340 // 34% power
+#define ROAST_DC 425 // 30% power
+#define COOLING_DC 375 // 34% power
+#define FAN_RAMP 105 // rate at which the fan ramps down as temp rises.
 #define EJECT_DC 1000 // full power
-#define COOLDOWN_TEMP 40 // temperature at which the cooldown stage ends.
+#define COOLDOWN_TEMP 45 // temperature at which the cooldown stage ends.
 
 #define COLORCHANGE 160
 
@@ -954,7 +955,10 @@ void StartRoastTask(void const * argument)
 		if (Progress.State == roasting) {
 			if(Progress.bt >= COLORCHANGE) {
 				int total_temp_diff = 235 - COLORCHANGE;
-				fan_offset = ((float) (Progress.bt - COLORCHANGE) / total_temp_diff) * 105;
+				float new_fan_offset = ((float) (Progress.bt - COLORCHANGE) / total_temp_diff) * FAN_RAMP;
+				if (new_fan_offset <= fan_offset) {
+					fan_offset = new_fan_offset;
+				}
 			} else {
 				fan_offset = 0;
 			}
