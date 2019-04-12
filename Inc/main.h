@@ -102,6 +102,18 @@
 /* USER CODE BEGIN Private defines */
 #define LD1_Pin GPIO_PIN_0
 #define LD1_GPIO_Port GPIOB
+//INPUT TEMP 1 (located after heating before chamber)
+#define INPUT1_TEMP_Pin GPIO_PIN_13
+#define INPUT1_TEMP_GPIO_Port GPIOF
+//INPUT TEMP 2  (located after heating before chamber)
+#define INPUT2_TEMP_Pin GPIO_PIN_9
+#define INPUT2_TEMP_GPIO_Port GPIOE
+//EXHAUST TEMP 1 (Located after chamber before seperator)
+#define EXHAUST1_TEMP_Pin GPIO_PIN_11
+#define EXHAUST1_TEMP_GPIO_Port GPIOE
+//EXHAUST TEMP 2 (Located after chamber before seperator)
+#define EXHAUST2_TEMP_Pin GPIO_PIN_14 //TODO: correct this
+#define EXHAUST2_TEMP_GPIO_Port GPIOF //TODO: correct this
 
 
 

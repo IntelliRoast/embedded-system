@@ -45,10 +45,12 @@ typedef struct profile {
 typedef struct progress_t {
 	enum state State;
 	int time;
-	int bt; // bean temp
 	int st; // set temp
-	int et; // element temp
-	int it; // input temp
+	int bt; // estimated bean temp
+	int i1t; // input 1 temp
+	int i2t; // input 2 temp
+	int e1t; // exhaust 1 temp
+	int e2t; // exhaust 2 temp
 	int dc; // duty cycle percentage
 	int fs; // fan duty cycle
 	int send_update; //control signal between tasks for sending an update to the app

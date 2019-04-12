@@ -53,6 +53,7 @@
 
 /* USER CODE BEGIN Includes */
 #include "stdint.h"
+#include "math.h"
 #include "stdlib.h"
 #include "string.h"
 #include "max31855.h"
@@ -146,7 +147,10 @@ int main(void) {
 	Progress.time = 0;
 	Progress.bt = 0;
 	Progress.st = 0;
-	Progress.et = 0;
+	Progress.i1t = 0;
+	Progress.i2t = 0;
+	Progress.e1t = 0;
+	Progress.e2t = 0;
 	Progress.dc = 0;
 	Progress.fs = 0;
 	Progress.send_update = 0;
@@ -524,8 +528,10 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOG_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin|SPI1_CS1_Pin, GPIO_PIN_RESET);
-  HAL_GPIO_WritePin(GPIOE, SPI1_CS2_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(INPUT1_TEMP_GPIO_Port, INPUT1_TEMP_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(INPUT2_TEMP_GPIO_Port, INPUT2_TEMP_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(EXHAUST1_TEMP_GPIO_Port, EXHAUST1_TEMP_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(EXHAUST2_TEMP_GPIO_Port, EXHAUST2_TEMP_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOB, LD3_Pin|LD2_Pin, GPIO_PIN_RESET);
@@ -540,14 +546,14 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_Init(USER_Btn_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : SPI1_CS0_Pin SPI1_CS1_Pin */
-  GPIO_InitStruct.Pin = SPI1_CS0_Pin|SPI1_CS1_Pin;
+  GPIO_InitStruct.Pin = INPUT1_TEMP_Pin|EXHAUST2_TEMP_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /*Configure GPIO pins : SPI1_CS2_Pin */
-  GPIO_InitStruct.Pin = SPI1_CS2_Pin;
+  GPIO_InitStruct.Pin = INPUT2_TEMP_Pin|EXHAUST1_TEMP_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -812,8 +818,8 @@ void StartDefaultTask(void const * argument)
 					Progress.time,
 					Progress.bt,
 					Progress.st,
-					Progress.et,
-					Progress.it,
+					Progress.e1t,
+					Progress.i1t,
 					Progress.dc,
 					Progress.fs);
 			//Send Bluetooth
@@ -825,9 +831,9 @@ void StartDefaultTask(void const * argument)
 					state_string,
 					Progress.time,
 					Progress.st,
-					Progress.it,
+					Progress.i1t,
 					Progress.bt,
-					Progress.et,
+					Progress.e1t,
 					Progress.dc,
 					Progress.fs);
 			//Send Serial
@@ -848,20 +854,19 @@ void StartRoastTask(void const * argument)
   /* USER CODE BEGIN StartRoastTask */
 
 	HAL_GPIO_WritePin(LD3_GPIO_Port, LD3_Pin, GPIO_PIN_RESET);
-	HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_SET);
-	HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(INPUT1_TEMP_GPIO_Port, INPUT1_TEMP_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(INPUT2_TEMP_GPIO_Port, INPUT2_TEMP_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(EXHAUST1_TEMP_GPIO_Port, EXHAUST1_TEMP_Pin, GPIO_PIN_SET);
+	HAL_GPIO_WritePin(EXHAUST2_TEMP_GPIO_Port, EXHAUST2_TEMP_Pin, GPIO_PIN_SET);
 
 	uint8_t spi_data[4] = { 0 };
 	int heDutyCycle;
-	char temp_msg[80] = { 0 };
 	int current_point = 1;
-	int ejection_time = 0;
 	float fan_offset = 0;
 
 	for (;;) {
 		if (reset_roast) {
 			current_point = 1;
-			ejection_time = 0;
 			osMutexWait(progressMutex,osWaitForever);
 			Progress.time = 0;
 			reset_roast = 0;
@@ -872,67 +877,49 @@ void StartRoastTask(void const * argument)
 		/* RoastTask HeartBeat. used to verify RoastTask isn't hung for some reason. */
 		HAL_GPIO_TogglePin(LD1_GPIO_Port, LD1_Pin);
 
-		/* Collect Bean and Element Temperatures */
-		/* Gather Bean Temp */
-		HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_RESET);
+		/* Collect Temperatures */
+
+		/* Gather Input Temp 1 */
+		HAL_GPIO_WritePin(INPUT1_TEMP_GPIO_Port, INPUT1_TEMP_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
 		HAL_Delay(1);
-		HAL_GPIO_WritePin(GPIOF, SPI1_CS0_Pin, GPIO_PIN_SET);
-		/*if (max31855_Error(spi_data)) {
-			if (max31855_Disconnected(spi_data)) {
-				sprintf(temp_msg, "ERROR: Bean Thermocouple Disconnected\n");
-			} else if (max31855_ShortVCC(spi_data)) {
-				sprintf(temp_msg, "ERROR: Bean Thermocouple Shorted to VCC\n");
-			} else if (max31855_ShortGND(spi_data)) {
-				sprintf(temp_msg, "ERROR: Bean Thermocouple Shorted to GND\n");
-			} else {
-				sprintf(temp_msg, "ERROR: Bean Thermocouple has unknown error\n");
-			}
-			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg,	strlen(temp_msg), 0xFFF);
-		}*/
+		HAL_GPIO_WritePin(INPUT1_TEMP_GPIO_Port, INPUT1_TEMP_Pin, GPIO_PIN_SET);
 		osMutexWait(progressMutex,osWaitForever);
-		Progress.bt = max31855toCelcius(spi_data);
+		Progress.i1t = max31855toCelcius(spi_data);
 		osMutexRelease(progressMutex);
 
-		/* Gather Heating Element Temp */
-		HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_RESET);
-		HAL_Delay(1);
+		/* Gather Input Temp 2 */
+		HAL_GPIO_WritePin(INPUT2_TEMP_GPIO_Port, INPUT2_TEMP_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-		HAL_GPIO_WritePin(GPIOF, SPI1_CS1_Pin, GPIO_PIN_SET);
-		/*if (max31855_Error(spi_data)) {
-			if (max31855_Disconnected(spi_data)) {
-				sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
-			} else if (max31855_ShortVCC(spi_data)) {
-				sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to VCC\n");
-			} else if (max31855_ShortGND(spi_data)) {
-				sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to GND\n");
-			} else {
-				sprintf(temp_msg, "ERROR: HE Thermocouple has unknown error\n");
-			}
-			HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
-		}*/
+		HAL_Delay(1);
+		HAL_GPIO_WritePin(INPUT2_TEMP_GPIO_Port, INPUT2_TEMP_Pin, GPIO_PIN_SET);
 		osMutexWait(progressMutex,osWaitForever);
-		Progress.et = max31855toCelcius(spi_data);
+		Progress.i2t = max31855toCelcius(spi_data);
 		osMutexRelease(progressMutex);
 
-		HAL_GPIO_WritePin(GPIOE, SPI1_CS2_Pin, GPIO_PIN_RESET);
-		HAL_Delay(1);
+		/* Gather Exhaust Temp 1 */
+		HAL_GPIO_WritePin(EXHAUST1_TEMP_GPIO_Port, EXHAUST1_TEMP_Pin, GPIO_PIN_RESET);
 		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
-		HAL_GPIO_WritePin(GPIOE, SPI1_CS2_Pin, GPIO_PIN_SET);
-		/*if (max31855_Error(spi_data)) {
-					if (max31855_Disconnected(spi_data)) {
-						sprintf(temp_msg, "ERROR: HE Thermocouple Disconnected\n");
-					} else if (max31855_ShortVCC(spi_data)) {
-						sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to VCC\n");
-					} else if (max31855_ShortGND(spi_data)) {
-						sprintf(temp_msg, "ERROR: HE Thermocouple Shorted to GND\n");
-					} else {
-						sprintf(temp_msg, "ERROR: HE Thermocouple has unknown error\n");
-					}
-					HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
-				}*/
+		HAL_Delay(1);
+		HAL_GPIO_WritePin(EXHAUST1_TEMP_GPIO_Port, EXHAUST1_TEMP_Pin, GPIO_PIN_SET);
 		osMutexWait(progressMutex,osWaitForever);
-		Progress.it = max31855toCelcius(spi_data);
+		Progress.e1t = max31855toCelcius(spi_data);
+		osMutexRelease(progressMutex);
+
+		/* Gather Exhaust Temp 2 */
+		HAL_GPIO_WritePin(EXHAUST2_TEMP_GPIO_Port, EXHAUST2_TEMP_Pin, GPIO_PIN_RESET);
+		HAL_SPI_Receive(&hspi1, spi_data, 4, 0xFF);
+		HAL_Delay(1);
+		HAL_GPIO_WritePin(EXHAUST2_TEMP_GPIO_Port, EXHAUST2_TEMP_Pin, GPIO_PIN_SET);
+		osMutexWait(progressMutex,osWaitForever);
+		Progress.e2t = max31855toCelcius(spi_data);
+		osMutexRelease(progressMutex);
+
+		/* Calculate Bean Temp */ //TODO: Verify This works
+		osMutexWait(progressMutex, osWaitForever);
+		float input = (Progress.i1t + Progress.i2t) / 2;
+		float bean = 0.241 * pow(input, 1.24);
+		Progress.bt = bean;
 		osMutexRelease(progressMutex);
 
 		if (Progress.State == idle){
@@ -1007,30 +994,8 @@ void StartRoastTask(void const * argument)
 			Progress.st = COOLDOWN_TEMP;
 			Progress.dc = 0;
 			Progress.fs = COOLING_DC / 10;
-			ejection_time = 0;
 			if(Progress.bt < COOLDOWN_TEMP) Progress.State = idle;
 			osMutexRelease(progressMutex);
-		}
-
-		if (Progress.State == ejecting) {
-			setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // Cut off heater
-			setPWM(htim3, TIM_CHANNEL_1, 1000, EJECT_DC); // Set fan DC.
-			if (ejection_time >= 5){ //ejection finished
-				/* cut off heater and fan */
-				setPWM(htim2, TIM_CHANNEL_1, 1000, 0); // cut off heater
-				setPWM(htim3, TIM_CHANNEL_1, 1024, 0); // cut off fan.
-				osMutexWait(progressMutex,osWaitForever);
-				Progress.State = idle;
-				Progress.dc = 0;
-				Progress.fs = 100;
-				osMutexRelease(progressMutex);
-				sprintf(temp_msg, "ROAST_FINISHED\n");
-				osMutexWait(wireSerial_mutex,osWaitForever);
-				HAL_UART_Transmit(&huart3, (uint8_t*) temp_msg, strlen(temp_msg), 0xFFF);
-				osMutexRelease(wireSerial_mutex);
-			} else {
-				ejection_time++;
-			}
 		}
 
 		osMutexWait(progressMutex,osWaitForever);
