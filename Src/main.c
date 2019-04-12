@@ -62,8 +62,8 @@
 #include "jsmn.h"
 
 #define ROAST_DC 425 // 30% power
-#define COOLING_DC 375 // 34% power
-#define FAN_RAMP 105 // rate at which the fan ramps down as temp rises.
+#define COOLING_DC 380 // 34% power
+#define FAN_RAMP 100 // rate at which the fan ramps down as temp rises.
 #define EJECT_DC 1000 // full power
 #define COOLDOWN_TEMP 45 // temperature at which the cooldown stage ends.
 

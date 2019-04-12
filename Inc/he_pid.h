@@ -11,7 +11,7 @@
 #include "stdint.h"
 
 /* Defines used in PID function */
-#define Kp 	28
+#define Kp 	30
 #define Ki 	3
 #define Kd  3
 #define Kimin -300
